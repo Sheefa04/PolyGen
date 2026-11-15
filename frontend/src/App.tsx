@@ -748,8 +748,7 @@ function App() {
   };
 
   // Generate a procedural object from the prompt.
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
 
@@ -762,6 +761,29 @@ function App() {
 
     }
 
+    try {
+  const response = await fetch('http://127.0.0.1:8000/api/prompt', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompt: prompt.trim(),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Backend request failed');
+  }
+
+  const data = await response.json();
+  console.log('PolyGen Backend Response:', data);
+
+} catch (error) {
+  console.error('Backend connection error:', error);
+  setMessage('Unable to connect to PolyGen backend.');
+  return;
+}
 
 
     const text = prompt.trim().toLowerCase();
