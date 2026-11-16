@@ -1,87 +1,55 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
-
 import {
-
   PanelsTopLeft,
-
   Layers3,
-
   Clock3,
-
   Box,
-
   Sparkles,
-
   ArrowUpRight,
-
   SlidersHorizontal,
-
   Palette,
-
   Ruler,
-
   RotateCcw,
-
   Trash2,
-
   FolderOpen,
   Download,
-
 } from 'lucide-react';
-
 import './App.css';
 
-
-
 type Dimensions = {
-
   width: string;
-
   height: string;
-
   depth: string;
-
 };
-
-
 
 type ShapeType = 'cube' | 'sphere' | 'cylinder' | 'cone' | 'torus';
 
-
-
 type SavedCreation = {
-
   id: number;
-
   name: string;
-
   shape: ShapeType;
-
   color: string;
-
   dimensions: Dimensions;
-
   prompt: string;
-
 };
-
 
 function baseDimensionsForShape(shape: ShapeType): Dimensions {
   switch (shape) {
-    case 'sphere': return { width: '1.80', height: '1.80', depth: '1.80' };
-    case 'cylinder': return { width: '1.50', height: '1.50', depth: '1.50' };
-    case 'cone': return { width: '1.70', height: '1.70', depth: '1.70' };
-    case 'torus': return { width: '2.16', height: '2.16', depth: '0.56' };
+    case 'sphere':
+      return { width: '1.80', height: '1.80', depth: '1.80' };
+    case 'cylinder':
+      return { width: '1.50', height: '1.50', depth: '1.50' };
+    case 'cone':
+      return { width: '1.70', height: '1.70', depth: '1.70' };
+    case 'torus':
+      return { width: '2.16', height: '2.16', depth: '0.56' };
     case 'cube':
-    default: return { width: '1.50', height: '1.50', depth: '1.50' };
+    default:
+      return { width: '1.50', height: '1.50', depth: '1.50' };
   }
 }
-
-
-
 
 function CreationThumbnail({ creation }: { creation: SavedCreation }) {
   const previewRef = useRef<HTMLDivElement>(null);
@@ -109,6 +77,7 @@ function CreationThumbnail({ creation }: { creation: SavedCreation }) {
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
     renderer.domElement.style.display = 'block';
+
     container.appendChild(renderer.domElement);
 
     let geometry: THREE.BufferGeometry;
@@ -136,6 +105,7 @@ function CreationThumbnail({ creation }: { creation: SavedCreation }) {
       roughness: 0.42,
       metalness: 0.1,
     });
+
     const mesh = new THREE.Mesh(geometry, material);
     const base = baseDimensionsForShape(creation.shape);
     mesh.scale.set(
@@ -145,6 +115,7 @@ function CreationThumbnail({ creation }: { creation: SavedCreation }) {
     );
     mesh.rotation.set(-0.18, 0.55, 0);
     mesh.castShadow = true;
+
     scene.add(mesh);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 2.1);
@@ -167,8 +138,8 @@ function CreationThumbnail({ creation }: { creation: SavedCreation }) {
       camera.updateProjectionMatrix();
       renderer.setSize(nextWidth, nextHeight);
     });
-    resizeObserver.observe(container);
 
+    resizeObserver.observe(container);
     renderer.render(scene, camera);
 
     return () => {
@@ -198,537 +169,271 @@ function CreationThumbnail({ creation }: { creation: SavedCreation }) {
   );
 }
 
-
 function App() {
-
   const mountRef = useRef<HTMLDivElement>(null);
-
   const meshRef = useRef<THREE.Mesh | null>(null);
-
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
 
-
-
   const [color, setColor] = useState('#8EAA9B');
-
   const [prompt, setPrompt] = useState('');
-
   const [objectName, setObjectName] = useState('Procedural cube');
-
   const [currentShape, setCurrentShape] = useState<ShapeType>('cube');
-
   const [activeView, setActiveView] = useState<'studio' | 'creations'>('studio');
-
-
-
   const [dimensions, setDimensions] = useState<Dimensions>({
-
     width: '1.50',
-
     height: '1.50',
-
     depth: '1.50',
-
   });
-
-
-
   const [message, setMessage] = useState('Your creative space is ready.');
+
   // Load saved creations from browser storage.
+  const [selectedCreationId, setSelectedCreationId] = useState<number | null>(null);
   const [savedCreations, setSavedCreations] = useState<SavedCreation[]>(() => {
-
     try {
-
       const stored = localStorage.getItem('polygen-creations');
-
       return stored ? (JSON.parse(stored) as SavedCreation[]) : [];
-
     } catch {
-
       return [];
-
     }
-
   });
+
   // Save creations whenever the collection changes.
   useEffect(() => {
-
     try {
-
       localStorage.setItem(
-
         'polygen-creations',
-
         JSON.stringify(savedCreations)
-
       );
-
-    } catch {
-
-      setMessage('Unable to save creations in browser storage.');
-
+    } catch (error) {
+      console.error('Unable to save creations in browser storage:', error);
     }
-
   }, [savedCreations]);
+
   // Create geometry for each supported shape.
   const createGeometry = (shape: ShapeType): THREE.BufferGeometry => {
-
     switch (shape) {
-
       case 'sphere':
-
         return new THREE.SphereGeometry(0.9, 40, 32);
-
-
-
       case 'cylinder':
-
         return new THREE.CylinderGeometry(0.75, 0.75, 1.5, 40);
-
-
-
       case 'cone':
-
         return new THREE.ConeGeometry(0.85, 1.7, 40);
-
-
-
       case 'torus':
-
         return new THREE.TorusGeometry(0.8, 0.28, 20, 60);
-
-
-
       case 'cube':
-
       default:
-
         return new THREE.BoxGeometry(1.5, 1.5, 1.5);
-
     }
-
   };
+
   // Get dimensions for each shape.
   const getDimensions = (shape: ShapeType): Dimensions => {
-
     switch (shape) {
-
       case 'sphere':
-
         return { width: '1.80', height: '1.80', depth: '1.80' };
-
-
-
       case 'cylinder':
-
         return { width: '1.50', height: '1.50', depth: '1.50' };
-
-
-
       case 'cone':
-
         return { width: '1.70', height: '1.70', depth: '1.70' };
-
-
-
       case 'torus':
-
         return { width: '2.16', height: '2.16', depth: '0.56' };
-
-
-
       case 'cube':
-
       default:
-
         return { width: '1.50', height: '1.50', depth: '1.50' };
-
     }
-
   };
+
   // Reset camera and object rotation.
   const resetCamera = () => {
-
     if (!cameraRef.current) return;
-
-
-
     cameraRef.current.position.set(3, 2.4, 4);
-
     cameraRef.current.lookAt(0, 0, 0);
 
-
-
     if (meshRef.current) {
-
       meshRef.current.rotation.set(0, 0, 0);
-
     }
-
   };
+
   // Create and manage the Three.js scene.
   useEffect(() => {
-
     const container = mountRef.current;
-
     if (!container) return;
 
-
-
     const scene = new THREE.Scene();
-
     scene.background = new THREE.Color('#F7F7F3');
 
-
-
     const camera = new THREE.PerspectiveCamera(
-
       45,
-
       Math.max(container.clientWidth, 1) /
-
         Math.max(container.clientHeight, 1),
-
       0.1,
-
       100
-
     );
-
-
-
     camera.position.set(3, 2.4, 4);
-
     camera.lookAt(0, 0, 0);
-
     cameraRef.current = camera;
 
-
-
     const renderer = new THREE.WebGLRenderer({
-
       antialias: true,
-
       alpha: false,
-
     });
-
-
-
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
     renderer.setSize(
-
       Math.max(container.clientWidth, 1),
-
       Math.max(container.clientHeight, 1)
-
     );
-
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-
     renderer.shadowMap.enabled = true;
-
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-
-
     container.appendChild(renderer.domElement);
-  // Initial cube.
+
+    // Initial cube.
     const material = new THREE.MeshStandardMaterial({
-
       color: '#8EAA9B',
-
       roughness: 0.45,
-
       metalness: 0.12,
-
     });
 
-
-
     const object = new THREE.Mesh(
-
       new THREE.BoxGeometry(1.5, 1.5, 1.5),
-
       material
-
     );
-
-
-
     object.castShadow = true;
-
     object.receiveShadow = true;
-
     scene.add(object);
-
     meshRef.current = object;
-  // Mouse and touch rotation.
+
+    // Mouse and touch rotation.
     let isDragging = false;
-
     let previousX = 0;
-
     let previousY = 0;
-
-
 
     const canvas = renderer.domElement;
 
-
-
     const handlePointerDown = (event: PointerEvent) => {
-
       if (event.button !== 0) return;
-
-
-
       isDragging = true;
-
       previousX = event.clientX;
-
       previousY = event.clientY;
-
       canvas.setPointerCapture(event.pointerId);
-
     };
-
-
 
     const handlePointerMove = (event: PointerEvent) => {
-
       if (!isDragging) return;
-
-
-
       const deltaX = event.clientX - previousX;
-
       const deltaY = event.clientY - previousY;
-
-
-
       object.rotation.y += deltaX * 0.01;
-
       object.rotation.x += deltaY * 0.01;
-
-
-
       previousX = event.clientX;
-
       previousY = event.clientY;
-
     };
-
-
 
     const handlePointerUp = () => {
-
       isDragging = false;
-
     };
-  // Zoom using mouse wheel.
+
+    // Zoom using mouse wheel.
     const handleWheel = (event: WheelEvent) => {
-
       event.preventDefault();
-
-
-
       const distance = camera.position.length();
-
       const nextDistance = THREE.MathUtils.clamp(
-
         distance + event.deltaY * 0.005,
-
         2.5,
-
         9
-
       );
-
-
-
       camera.position.setLength(nextDistance);
-
     };
-
-
 
     canvas.addEventListener('pointerdown', handlePointerDown);
-
     canvas.addEventListener('pointermove', handlePointerMove);
-
     canvas.addEventListener('pointerup', handlePointerUp);
-
     canvas.addEventListener('pointercancel', handlePointerUp);
-
     canvas.addEventListener('wheel', handleWheel, { passive: false });
-  // Lighting.
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
 
+    // Lighting.
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
     scene.add(ambientLight);
 
-
-
     const mainLight = new THREE.DirectionalLight(0xffffff, 3);
-
     mainLight.position.set(4, 6, 5);
-
     mainLight.castShadow = true;
-
     scene.add(mainLight);
 
-
-
     const softLight = new THREE.DirectionalLight(0xffffff, 1);
-
     softLight.position.set(-4, 2, -3);
-
     scene.add(softLight);
-  // Studio grid.
+
+    // Studio grid.
     const grid = new THREE.GridHelper(
-
       10,
-
       20,
-
       0xB9C5BD,
-
       0xE2E6E1
-
     );
-
-
-
     grid.position.y = -1.1;
-
-
-
     const gridMaterials = Array.isArray(grid.material)
-
       ? grid.material
-
       : [grid.material];
-
-
-
     gridMaterials.forEach((item) => {
-
       item.transparent = true;
-
       item.opacity = 0.45;
-
     });
-
-
-
     scene.add(grid);
-  // Animation loop.
+
+    // Animation loop.
     let animationId = 0;
-
-
-
     const animate = () => {
-
       animationId = requestAnimationFrame(animate);
-
       renderer.render(scene, camera);
-
     };
-
-
-
     animate();
-  // Resize the renderer when its container changes size.
+
+    // Resize the renderer when its container changes size.
     const resizeObserver = new ResizeObserver(() => {
-
       const width = container.clientWidth;
-
       const height = container.clientHeight;
-  // The Studio view can be hidden while My Creations is open.  // Wait until it becomes visible before resizing the renderer.
       if (!width || !height) return;
-
-
-
       camera.aspect = width / height;
-
       camera.updateProjectionMatrix();
-
       renderer.setSize(width, height);
-
     });
-
-
-
     resizeObserver.observe(container);
-  // Cleanup.
+
+    // Cleanup.
     return () => {
-
       cancelAnimationFrame(animationId);
-
       resizeObserver.disconnect();
-
-
-
       canvas.removeEventListener('pointerdown', handlePointerDown);
-
       canvas.removeEventListener('pointermove', handlePointerMove);
-
       canvas.removeEventListener('pointerup', handlePointerUp);
-
       canvas.removeEventListener('pointercancel', handlePointerUp);
-
       canvas.removeEventListener('wheel', handleWheel);
-
-
-
       object.geometry.dispose();
-
       material.dispose();
-
-
-
       gridMaterials.forEach((item) => item.dispose());
-
-
-
       renderer.dispose();
-
-
-
       if (container.contains(renderer.domElement)) {
-
         container.removeChild(renderer.domElement);
-
       }
-
-
-
       meshRef.current = null;
-
       cameraRef.current = null;
-
     };
-
   }, []);
+
   // Update the selected object's colour.
   useEffect(() => {
-
     const material = meshRef.current?.material;
-
-
-
     if (material instanceof THREE.MeshStandardMaterial) {
-
       material.color.set(color);
-
     }
-
   }, [color]);
 
   // Apply editable dimensions to the active 3D object.
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
+
     const base = getDimensions(currentShape);
     mesh.scale.set(
       Math.max(Number(dimensions.width) / Number(base.width), 0.01),
@@ -744,125 +449,146 @@ function App() {
     }
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return;
-    setDimensions((previous) => ({ ...previous, [key]: String(Math.min(10, Math.max(0.1, numericValue))) }));
+    setDimensions((previous) => ({
+      ...previous,
+      [key]: String(Math.min(10, Math.max(0.1, numericValue))),
+    }));
   };
 
   // Generate a procedural object from the prompt.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-
-
     if (!prompt.trim()) {
-
       setMessage('Enter an idea to preview your creation.');
-
       return;
-
     }
-
-    try {
-  const response = await fetch('http://127.0.0.1:8000/api/prompt', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      prompt: prompt.trim(),
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Backend request failed');
-  }
-
-  const data = await response.json();
-  console.log('PolyGen Backend Response:', data);
-
-} catch (error) {
-  console.error('Backend connection error:', error);
-  setMessage('Unable to connect to PolyGen backend.');
-  return;
-}
-
 
     const text = prompt.trim().toLowerCase();
 
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+        }),
+      });
 
+      if (!response.ok) {
+        throw new Error('Backend request failed');
+      }
 
-    let shape: ShapeType;
-
-
-
-    if (text.includes('sphere') || text.includes('ball')) {
-
-      shape = 'sphere';
-
-    } else if (text.includes('cylinder')) {
-
-      shape = 'cylinder';
-
-    } else if (text.includes('cone')) {
-
-      shape = 'cone';
-
-    } else if (text.includes('torus') || text.includes('ring')) {
-
-      shape = 'torus';
-
-    } else if (text.includes('cube') || text.includes('box')) {
-
-      shape = 'cube';
-
-    } else {
-
-      setMessage(
-
-        'Try a supported shape: cube, sphere, cylinder, cone or torus.'
-
-      );
-
+      const data = await response.json();
+      console.log('PolyGen Backend Response:', data);
+    } catch (error) {
+      console.error('Backend connection error:', error);
+      setMessage('Unable to connect to PolyGen backend.');
       return;
-
     }
 
-
+    // Detect shape from prompt.
+    let shape: ShapeType;
+    if (
+      text.includes('sphere') ||
+      text.includes('ball') ||
+      text.includes('football') ||
+      text.includes('basketball') ||
+      text.includes('globe')
+    ) {
+      shape = 'sphere';
+    } else if (
+      text.includes('cylinder') ||
+      text.includes('pipe') ||
+      text.includes('tube')
+    ) {
+      shape = 'cylinder';
+    } else if (
+      text.includes('cone') ||
+      text.includes('funnel')
+    ) {
+      shape = 'cone';
+    } else if (
+      text.includes('torus') ||
+      text.includes('ring') ||
+      text.includes('donut')
+    ) {
+      shape = 'torus';
+    } else if (
+      text.includes('cube') ||
+      text.includes('box') ||
+      text.includes('cuboid') ||
+      text.includes('block')
+    ) {
+      shape = 'cube';
+    } else {
+      setMessage('Try a supported shape: cube, sphere, cylinder, cone or torus.');
+      return;
+    }
 
     const currentMesh = meshRef.current;
-
-
-
     if (!currentMesh) {
-
       setMessage('3D viewer is not ready. Please try again.');
-
       return;
-
     }
 
+    // Detect colour from prompt.
+    let detectedColor = color;
+    if (text.includes('red')) {
+      detectedColor = '#FF0000';
+    } else if (text.includes('blue')) {
+      detectedColor = '#0000FF';
+    } else if (text.includes('green')) {
+      detectedColor = '#008000';
+    } else if (text.includes('yellow')) {
+      detectedColor = '#FFFF00';
+    } else if (text.includes('orange')) {
+      detectedColor = '#FFA500';
+    } else if (text.includes('purple')) {
+      detectedColor = '#800080';
+    } else if (text.includes('black')) {
+      detectedColor = '#000000';
+    } else if (text.includes('white')) {
+      detectedColor = '#FFFFFF';
+    }
+    setColor(detectedColor);
 
-
+    // Generate the selected 3D geometry.
     currentMesh.geometry.dispose();
-
     currentMesh.geometry = createGeometry(shape);
-
     currentMesh.scale.set(1, 1, 1);
-
     currentMesh.rotation.set(0, 0, 0);
+    if (currentMesh.material instanceof THREE.MeshStandardMaterial) {
+      currentMesh.material.color.set(detectedColor);
+    }
 
+    const newShapeDimensions = getDimensions(shape);
+    const newObjectName = `Procedural ${shape}`;
 
+    let newCreationId = Date.now();
+    while (savedCreations.some((item) => item.id === newCreationId)) {
+      newCreationId += 1;
+    }
 
+    const newCreation: SavedCreation = {
+      id: newCreationId,
+      name: newObjectName,
+      shape,
+      color: detectedColor,
+      dimensions: newShapeDimensions,
+      prompt: prompt.trim(),
+    };
+
+    setSavedCreations((previous) => [...previous, newCreation]);
+    setSelectedCreationId(newCreationId);
     setCurrentShape(shape);
-
-    setObjectName(`Procedural ${shape}`);
-
-    setDimensions(getDimensions(shape));
-
-
-
-    setMessage(`Procedural ${shape} preview created successfully!`);
-
+    setObjectName(newObjectName);
+    setDimensions(newShapeDimensions);
+    setMessage(`Procedural ${shape} preview created and added to My Creations!`);
   };
+
   // Export a Three.js object as a binary GLB file.
   const downloadGLB = (mesh: THREE.Mesh, fileName: string) => {
     const exportScene = new THREE.Scene();
@@ -876,8 +602,8 @@ function App() {
     }
 
     exportScene.add(exportMesh);
-    const exporter = new GLTFExporter();
 
+    const exporter = new GLTFExporter();
     exporter.parse(
       exportScene,
       (result) => {
@@ -933,326 +659,223 @@ function App() {
         metalness: 0.12,
       })
     );
+
     const base = baseDimensionsForShape(creation.shape);
     exportMesh.scale.set(
       Math.max(Number(creation.dimensions.width) / Number(base.width), 0.01),
       Math.max(Number(creation.dimensions.height) / Number(base.height), 0.01),
       Math.max(Number(creation.dimensions.depth) / Number(base.depth), 0.01)
     );
+
     downloadGLB(exportMesh, creation.name);
     exportMesh.geometry.dispose();
     (exportMesh.material as THREE.Material).dispose();
   };
 
-  // Save the current object.
+  // Add a new creation or update the creation currently open in Studio.
   const saveCreation = () => {
-
-    const creation: SavedCreation = {
-
-      id: Date.now(),
-
-      name: objectName,
-
-      shape: currentShape,
-
-      color,
-
-      dimensions,
-
-      prompt,
-
-    };
-
-
-
-    setSavedCreations((previous) => [...previous, creation]);
-
-    setMessage('Creation saved successfully!');
-
-  };
-  // Reopen a saved object in the Studio.
-  const openCreation = (creation: SavedCreation) => {
-
-    const currentMesh = meshRef.current;
-
-
-
-    if (!currentMesh) {
-
-      setMessage('3D viewer is not ready. Please try again.');
-
+    const trimmedName = objectName.trim();
+    if (!trimmedName) {
+      setMessage('Please enter a name before saving your creation.');
       return;
-
     }
 
+    const isExistingCreation =
+      selectedCreationId !== null &&
+      savedCreations.some((item) => item.id === selectedCreationId);
 
+    if (isExistingCreation) {
+      const updatedCreation: SavedCreation = {
+        id: selectedCreationId,
+        name: trimmedName,
+        shape: currentShape,
+        color,
+        dimensions: { ...dimensions },
+        prompt,
+      };
+
+      setSavedCreations((previous) =>
+        previous.map((item) =>
+          item.id === selectedCreationId ? updatedCreation : item
+        )
+      );
+      setMessage('Saved creation updated successfully!');
+    } else {
+      let creationId = Date.now();
+      // Avoid an ID collision if two creations are saved in the same millisecond.
+      while (savedCreations.some((item) => item.id === creationId)) {
+        creationId += 1;
+      }
+
+      const newCreation: SavedCreation = {
+        id: creationId,
+        name: trimmedName,
+        shape: currentShape,
+        color,
+        dimensions: { ...dimensions },
+        prompt,
+      };
+
+      setSavedCreations((previous) => [...previous, newCreation]);
+      setSelectedCreationId(creationId);
+      setMessage('Creation added successfully!');
+    }
+  };
+
+  // Reopen a saved object in the Studio.
+  const openCreation = (creation: SavedCreation) => {
+    const currentMesh = meshRef.current;
+    if (!currentMesh) {
+      setMessage('3D viewer is not ready. Please try again.');
+      return;
+    }
 
     currentMesh.geometry.dispose();
-
     currentMesh.geometry = createGeometry(creation.shape);
-
     currentMesh.rotation.set(0, 0, 0);
 
+    if (currentMesh.material instanceof THREE.MeshStandardMaterial) {
+      currentMesh.material.color.set(creation.color);
+    }
 
-
-    setObjectName(creation.name);
-
-    setCurrentShape(creation.shape);
-
-    setDimensions(creation.dimensions);
-
-    setColor(creation.color);
-
-    setPrompt(creation.prompt);
-
-
-
-    setMessage('Saved creation reopened successfully!');
-
-    setActiveView('studio');
-
-  };
-  // Delete a saved object.
-  const deleteCreation = (id: number) => {
-
-    setSavedCreations((previous) =>
-
-      previous.filter((creation) => creation.id !== id)
-
+    const base = getDimensions(creation.shape);
+    currentMesh.scale.set(
+      Math.max(Number(creation.dimensions.width) / Number(base.width), 0.01),
+      Math.max(Number(creation.dimensions.height) / Number(base.height), 0.01),
+      Math.max(Number(creation.dimensions.depth) / Number(base.depth), 0.01)
     );
 
-
-
-    setMessage('Creation deleted.');
-
+    setSelectedCreationId(creation.id);
+    setObjectName(creation.name);
+    setCurrentShape(creation.shape);
+    setDimensions(creation.dimensions);
+    setColor(creation.color);
+    setPrompt(creation.prompt);
+    setMessage('Saved creation reopened successfully!');
+    setActiveView('studio');
   };
 
-
+  // Delete a saved object.
+  const deleteCreation = (id: number) => {
+    setSavedCreations((previous) =>
+      previous.filter((creation) => creation.id !== id)
+    );
+    if (selectedCreationId === id) {
+      setSelectedCreationId(null);
+    }
+    setMessage('Creation deleted.');
+  };
 
   return (
-
     <div className="app-shell">
-
       {/* Sidebar */}
-
       <aside className="sidebar">
-
         <div className="brand">
-
           polygen<span>.</span>
-
           <small>CREATIVE STUDIO</small>
-
         </div>
-
-
 
         <div className="sidebar-section">
-
           <p className="side-label">WORKSPACE</p>
 
-
-
           <button
-
             type="button"
-
             className={`nav-item ${
-
               activeView === 'studio' ? 'active' : ''
-
             }`}
-
             onClick={() => setActiveView('studio')}
-
           >
-
             <PanelsTopLeft size={18} strokeWidth={1.8} />
-
             Studio
-
           </button>
 
-
-
           <button
-
             type="button"
-
             className={`nav-item ${
-
               activeView === 'creations' ? 'active' : ''
-
             }`}
-
             onClick={() => setActiveView('creations')}
-
           >
-
             <Layers3 size={18} strokeWidth={1.8} />
-
             My creations
-
             <span style={{ marginLeft: 'auto', fontSize: '12px' }}>
-
               {savedCreations.length}
-
             </span>
-
           </button>
-
-
 
           <button
-
             type="button"
-
             className="nav-item"
-
             onClick={() =>
-
               setMessage('Recent projects will be available soon.')
-
             }
-
           >
-
             <Clock3 size={18} strokeWidth={1.8} />
-
             Recent projects
-
           </button>
-
         </div>
-
-
 
         <div className="sidebar-bottom">
-
           <div className="profile-mark">P</div>
-
           <div>
-
             <strong>PolyGen Workspace</strong>
-
             <small>Personal studio · v0.1</small>
-
           </div>
-
         </div>
-
       </aside>
 
-
-
       {/* Main workspace */}
-
       <main className="studio-main">
-
         <header className="studio-header">
-
           <div>
-
             <p className="eyebrow">YOUR CREATIVE WORKSPACE / 001</p>
-
-
-
             <h1>
-
               Make something <span>different.</span>
-
             </h1>
-
-
-
             <p className="header-description">
-
               Shape your ideas into interactive 3D creations.
-
             </p>
-
           </div>
-
-
 
           <div className="header-actions">
-
             <span className="save-status">
-
               <span className="status-dot" />
-
               Local workspace
-
             </span>
-
           </div>
-
         </header>
 
-
-
         {/* Studio stays mounted so the Three.js canvas is not destroyed. */}
-
         <section
-
           className="studio-layout"
-
           style={{
-
             display: activeView === 'studio' ? 'grid' : 'none',
-
           }}
-
         >
-
           <div className="canvas-column">
-
             <div className="canvas-card">
-
               <div className="canvas-toolbar">
-
                 <div>
-
                   <p className="eyebrow">LIVE PREVIEW</p>
-
                   <h2>{objectName}</h2>
-
                 </div>
 
-
-
                 <div
-
                   style={{
-
                     display: 'flex',
-
                     alignItems: 'center',
-
                     gap: '10px',
-
                   }}
-
                 >
-
                   <span className="object-tag">3D OBJECT / 01</span>
 
-
-
                   <button
-
                     type="button"
-
                     onClick={saveCreation}
-
                     className="create-button"
-
                   >
-
                     <FolderOpen size={15} />
-
-                    Save creation
-
+                    {selectedCreationId !== null ? 'Save changes' : 'Save creation'}
                   </button>
 
                   <button
@@ -1264,214 +887,123 @@ function App() {
                     <Download size={15} />
                     Export GLB
                   </button>
-
                 </div>
-
               </div>
-
-
 
               <div className="viewer" ref={mountRef}>
-
                 <button
-
                   type="button"
-
                   className="reset-camera"
-
                   onClick={resetCamera}
-
                 >
-
                   <RotateCcw size={13} />
-
                   Reset view
-
                 </button>
-
               </div>
-
-
 
               <div className="canvas-footer">
-
                 <span>Drag to rotate · Scroll to zoom</span>
-
                 <span>Interactive preview</span>
-
               </div>
-
             </div>
-
-
 
             {/* Idea console */}
-
             <div className="idea-card">
-
               <div className="idea-heading">
-
                 <div>
-
                   <p className="eyebrow">IDEA TO OBJECT</p>
-
                   <h2>What are you imagining?</h2>
-
                 </div>
-
-
-
                 <span className="idea-number">01 — 03</span>
-
               </div>
-
-
 
               <form onSubmit={handleSubmit}>
-
                 <textarea
-
                   value={prompt}
-
                   onChange={(event) => setPrompt(event.target.value)}
-
                   placeholder="Try: Create a sphere, cylinder, cone, torus or cube..."
-
                 />
-
-
 
                 <div className="idea-submit-row">
-
                   <p>{message}</p>
-
-
-
                   <button type="submit" className="create-button">
-
                     Preview idea
-
                     <ArrowUpRight size={17} />
-
                   </button>
-
                 </div>
-
               </form>
-
             </div>
-
           </div>
 
-
-
           {/* Properties inspector */}
-
           <aside className="inspector">
-
             <div className="inspector-heading">
-
               <p className="eyebrow">OBJECT SETTINGS</p>
-
-
-
               <h2>
-
                 <SlidersHorizontal size={19} strokeWidth={1.8} />
-
                 Inspector
-
               </h2>
-
             </div>
 
-
-
             <div className="inspector-section">
-
               <p className="section-label">SELECTED OBJECT</p>
-
-
-
               <div className="selected-object">
-
                 <div className="object-thumbnail">
-
                   <Box size={23} strokeWidth={1.6} />
-
                 </div>
-
-
-
-                <div>
-
-                  <strong>{objectName}</strong>
-
-                  <small>Mesh · Basic geometry</small>
-
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    value={objectName}
+                    onChange={(event) => setObjectName(event.target.value)}
+                    placeholder="Creation name"
+                    aria-label="Creation name"
+                    style={{
+                      width: '100%',
+                      padding: '5px 8px',
+                      border: '1px solid #E2E6E1',
+                      borderRadius: '6px',
+                      background: '#FFFFFF',
+                      color: '#252B27',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      fontFamily: 'inherit',
+                      outline: 'none',
+                    }}
+                  />
+                  <small style={{ display: 'block', marginTop: '4px', color: '#68716B', fontSize: '9px' }}>
+                    Mesh · Basic geometry
+                  </small>
                 </div>
-
               </div>
-
             </div>
 
-
-
             <div className="inspector-section">
-
               <p className="section-label">
-
                 <Palette size={14} />
-
                 APPEARANCE
-
               </p>
-
-
 
               <label className="property-label">
-
                 Object colour
-
-
-
                 <input
-
                   type="color"
-
                   value={color}
-
                   onChange={(event) => setColor(event.target.value)}
-
                 />
-
               </label>
 
-
-
               <div className="color-value">
-
                 <span>Colour value</span>
-
                 <strong>{color.toUpperCase()}</strong>
-
               </div>
-
             </div>
 
-
-
             <div className="inspector-section">
-
               <p className="section-label">
-
                 <Ruler size={14} />
-
                 DIMENSIONS
-
               </p>
-
-
 
               {(['width', 'height', 'depth'] as const).map((key) => (
                 <label
@@ -1506,201 +1038,95 @@ function App() {
                   />
                 </label>
               ))}
-
             </div>
-
-
 
             <div className="inspector-note">
-
               <Sparkles size={17} />
-
               <p>
-
                 Adjust width, height and depth to resize your object.
-
                 Values are saved and included in GLB exports.
-
               </p>
-
             </div>
-
           </aside>
-
         </section>
 
-
-
         {/* My Creations view */}
-
         {activeView === 'creations' && (
-
           <section style={{ padding: '30px 0' }}>
-
             <div style={{ marginBottom: '25px' }}>
-
               <p className="eyebrow">YOUR WORKSPACE / LIBRARY</p>
-
-
-
               <h2 style={{ fontSize: '28px', margin: '8px 0' }}>
-
                 My creations
-
               </h2>
-
-
-
               <p style={{ color: '#68716B' }}>
-
                 Your saved 3D objects, all in one place.
-
               </p>
-
             </div>
 
-
-
             {savedCreations.length === 0 ? (
-
               <div
-
                 style={{
-
                   background: '#FFFFFF',
-
                   border: '1px solid #E2E6E1',
-
                   borderRadius: '14px',
-
                   padding: '45px 20px',
-
                   textAlign: 'center',
-
                 }}
-
               >
-
                 <Box size={35} color="#8EAA9B" />
-
-
-
                 <h3>No creations yet</h3>
-
-
-
                 <p style={{ color: '#68716B' }}>
-
                   Create a 3D object in Studio and save it here.
-
                 </p>
-
-
-
                 <button
-
                   type="button"
-
                   className="create-button"
-
                   onClick={() => setActiveView('studio')}
-
                 >
-
                   Go to Studio
-
                   <ArrowUpRight size={16} />
-
                 </button>
-
               </div>
-
             ) : (
-
               <div
-
                 style={{
-
                   display: 'grid',
-
                   gridTemplateColumns:
-
                     'repeat(auto-fill, minmax(230px, 1fr))',
-
                   gap: '18px',
-
                 }}
-
               >
-
                 {savedCreations.map((creation) => (
-
                   <div
-
                     key={creation.id}
-
                     style={{
-
                       background: '#FFFFFF',
-
                       border: '1px solid #E2E6E1',
-
                       borderRadius: '14px',
-
                       padding: '20px',
-
                     }}
-
                   >
-
                     <CreationThumbnail creation={creation} />
-
-
-
                     <h3 style={{ margin: '0 0 6px' }}>
-
                       {creation.name}
-
                     </h3>
-
-
-
                     <p style={{ color: '#68716B', fontSize: '13px' }}>
-
                       {creation.shape.toUpperCase()} · {creation.color}
-
                     </p>
-
-
-
                     <div
-
                       style={{
-
                         display: 'flex',
-
                         gap: '8px',
-
                         marginTop: '16px',
-
                       }}
-
                     >
-
                       <button
-
                         type="button"
-
                         className="create-button"
-
                         onClick={() => openCreation(creation)}
-
                       >
-
                         Open
-
                         <ArrowUpRight size={15} />
-
                       </button>
 
                       <button
@@ -1713,72 +1139,37 @@ function App() {
                         Export
                       </button>
 
-
-
                       <button
-
                         type="button"
-
                         onClick={() => deleteCreation(creation.id)}
-
                         aria-label={`Delete ${creation.name}`}
-
                         style={{
-
                           border: '1px solid #E2E6E1',
-
                           borderRadius: '8px',
-
                           padding: '8px 12px',
-
                           background: '#FFFFFF',
-
                           cursor: 'pointer',
-
                           color: '#68716B',
-
                         }}
-
                       >
-
                         <Trash2 size={15} />
-
                         Delete
-
                       </button>
-
                     </div>
-
                   </div>
-
                 ))}
-
               </div>
-
             )}
-
           </section>
-
         )}
 
-
-
         <footer className="studio-footer">
-
           <span>POLYGEN © 2026</span>
-
           <span>GENERATIVE TEXT-TO-3D ASSET PIPELINE</span>
-
         </footer>
-
       </main>
-
     </div>
-
   );
-
 }
-
-
 
 export default App;

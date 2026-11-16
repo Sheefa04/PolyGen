@@ -57,3 +57,41 @@ All the above features were tested successfully.
 - Research actual AI Text-to-3D and Image-to-3D providers.
 
 **Status:** Backend foundation and initial frontend integration completed successfully.
+
+## Day 8 (16 November 2026)
+
+### Completed Tasks
+- Restored `frontend/src/App.tsx` and removed orphaned temporary component, resolving TypeScript compilation errors.
+- Completed and tested the **Add New Creation** flow: submitting a prompt generates the 3D procedural object and automatically adds it with a unique ID to *My Creations*.
+- Completed and tested the **Modify Existing Creation** flow: selecting an existing creation from *My Creations* loads all properties (shape, color, dimensions, name, prompt) into Studio with immediate 3D preview sync.
+- Made creation names editable by adding an interactive name input field inside the Inspector panel.
+- Fixed critical ID collision and incrementation bug in `saveCreation()` to ensure "Save changes" updates existing creations in place without creating accidental duplicate entries.
+- Verified the **Delete Creation** flow: deleting an item removes it immediately from *My Creations* and `localStorage`, deselecting it cleanly if open in Studio.
+- Verified **LocalStorage Persistence**: all creations persist across page reloads and refreshes under `polygen-creations`.
+- Preserved existing 3D viewer features: Three.js rendering, pointer drag rotation, mouse wheel zoom, camera reset, live color/dimension updates, and binary GLB export via `GLTFExporter`.
+- Verified backend endpoints (`/`, `/health`, `/api/prompt`) in FastAPI.
+- Resolved React linter warnings (`oxlint` completed with 0 errors and 0 warnings).
+
+### Files Modified
+- `frontend/src/App.tsx`
+- `docs/progress-log.md`
+
+### Features Fixed or Improved
+- Automatic addition of newly generated 3D creations to *My Creations* with collision-free unique IDs.
+- In-place modification of existing creations preventing duplicate creation entries.
+- Interactive creation name editing in the Inspector panel.
+- Synchronized mesh color and dimensions directly on reopen for smooth 3D preview transitions.
+- React compiler clean linting and strict type safety.
+
+### Testing Results
+- `oxlint`: 0 errors, 0 warnings.
+- `tsc -b && vite build`: compiled cleanly with 0 errors.
+- FastAPI backend endpoints tested and verified (`/`, `/health`, `/api/prompt`).
+- Creation lifecycle tested: Add -> Modify -> Save -> Delete -> Persist in LocalStorage.
+
+### Pending Work for Next Development Session
+- Expand prompt understanding for multilingual input (Hindi, Hinglish, and English).
+- Connect actual AI Text-to-3D generation backends or providers.
+- Add confirmation modal or undo action for creation deletion.
+
+**Status:** Add, Modify, Save, Delete, and 3D Studio functionality fully operational and verified.
