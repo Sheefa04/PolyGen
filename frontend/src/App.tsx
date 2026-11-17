@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import {
@@ -15,8 +15,18 @@ import {
   Trash2,
   FolderOpen,
   Download,
+  User,
+  LogIn,
+  LogOut,
+  ShieldCheck,
+  X,
+  Cloud,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import './App.css';
+
+const API_BASE_URL = 'http://127.0.0.1:8000';
 
 type Dimensions = {
   width: string;
@@ -26,13 +36,26 @@ type Dimensions = {
 
 type ShapeType = 'cube' | 'sphere' | 'cylinder' | 'cone' | 'torus';
 
+type ActiveView = 'studio' | 'creations' | 'profile';
+
+type AuthUser = {
+  id: number;
+  email: string;
+  created_at?: string;
+};
+
 type SavedCreation = {
   id: number;
+  user_id?: number;
   name: string;
   shape: ShapeType;
+  object_type?: string;
   color: string;
   dimensions: Dimensions;
   prompt: string;
+  creation_data?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 function baseDimensionsForShape(shape: ShapeType): Dimensions {
@@ -49,6 +72,108 @@ function baseDimensionsForShape(shape: ShapeType): Dimensions {
     default:
       return { width: '1.50', height: '1.50', depth: '1.50' };
   }
+}
+
+// Convert English, Hindi and Hinglish prompts into easy-to-match words.
+// NFC normalization keeps Hindi characters in a consistent Unicode form.
+function normalizePrompt(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .normalize('NFC')
+    .replace(/[.,!?;:()[\]{}"'،؛؟]/g, ' ')
+    .replace(/[–—-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Match complete words so a short word does not accidentally match
+// an unrelated word that happens to contain the same letters.
+function promptHasAny(words: Set<string>, terms: string[]): boolean {
+  return terms.some((term) => words.has(term));
+}
+
+// Read size and proportion words from English, Hindi and Hinglish prompts.
+function getPromptDimensions(
+  shape: ShapeType,
+  words: Set<string>,
+  startingDimensions?: Dimensions
+): Dimensions {
+  const base = startingDimensions ?? baseDimensionsForShape(shape);
+  let width = Number(base.width);
+  let height = Number(base.height);
+  let depth = Number(base.depth);
+
+  // Overall object size.
+  if (
+    promptHasAny(words, [
+      'small', 'tiny', 'little', 'chhota', 'chhoti', 'chhote',
+      'छोटा', 'छोटी', 'छोटे', 'नन्हा', 'नन्ही',
+    ])
+  ) {
+    width *= 0.65;
+    height *= 0.65;
+    depth *= 0.65;
+  } else if (
+    promptHasAny(words, [
+      'large', 'big', 'huge', 'bada', 'badi', 'bade',
+      'बड़ा', 'बड़ी', 'बड़े', 'विशाल',
+    ])
+  ) {
+    width *= 1.5;
+    height *= 1.5;
+    depth *= 1.5;
+  }
+
+  // Height / length.
+  if (
+    promptHasAny(words, [
+      'tall', 'long', 'lamba', 'lambi', 'ऊँचा', 'ऊंचा',
+      'लंबा', 'लम्बा', 'लंबी', 'लम्बी',
+    ])
+  ) {
+    height *= 1.4;
+  } else if (
+    promptHasAny(words, [
+      'short', 'chhota', 'chhoti', 'नाटा', 'छोटा',
+    ])
+  ) {
+    height *= 0.75;
+  }
+
+  // Width.
+  if (
+    promptHasAny(words, [
+      'wide', 'broad', 'chauda', 'chaudi', 'चौड़ा', 'चौड़ी', 'चौड़ी',
+    ])
+  ) {
+    width *= 1.35;
+  } else if (
+    promptHasAny(words, ['narrow', 'patla', 'patli', 'पतला', 'पतली'])
+  ) {
+    width *= 0.75;
+  }
+
+  // Depth / thickness.
+  if (
+    promptHasAny(words, [
+      'thick', 'thicker', 'mota', 'moti', 'मोटा', 'मोटी',
+    ])
+  ) {
+    depth *= 1.4;
+  } else if (
+    promptHasAny(words, [
+      'thin', 'thinner', 'patla', 'patli', 'पतला', 'पतली',
+    ])
+  ) {
+    depth *= 0.6;
+  }
+
+  const limit = (value: number) => Math.min(10, Math.max(0.1, value));
+  return {
+    width: limit(width).toFixed(2),
+    height: limit(height).toFixed(2),
+    depth: limit(depth).toFixed(2),
+  };
 }
 
 function CreationThumbnail({ creation }: { creation: SavedCreation }) {
@@ -178,15 +303,155 @@ function App() {
   const [prompt, setPrompt] = useState('');
   const [objectName, setObjectName] = useState('Procedural cube');
   const [currentShape, setCurrentShape] = useState<ShapeType>('cube');
-  const [activeView, setActiveView] = useState<'studio' | 'creations'>('studio');
+  const [activeView, setActiveView] = useState<ActiveView>('studio');
   const [dimensions, setDimensions] = useState<Dimensions>({
     width: '1.50',
     height: '1.50',
     depth: '1.50',
   });
   const [message, setMessage] = useState('Your creative space is ready.');
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageName, setImageName] = useState('');
+  const [imageStatus, setImageStatus] = useState('Upload a PNG, JPG or WebP image (max 8 MB).');
 
-  // Load saved creations from browser storage.
+  // Authentication state
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+
+  // Validate stored JWT token on application startup
+  useEffect(() => {
+    const token = localStorage.getItem('polygen_token');
+    if (!token) return;
+
+    const verifyToken = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user) {
+            setUser(data.user);
+          }
+        } else if (response.status === 401) {
+          localStorage.removeItem('polygen_token');
+          setUser(null);
+        }
+      } catch (error) {
+        console.warn('Backend server currently unavailable for initial auth check:', error);
+      }
+    };
+
+    verifyToken();
+  }, []);
+
+  const handleLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthError(null);
+    setAuthLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: authEmail.trim(),
+          password: authPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setAuthError(data.detail || 'Incorrect email or password.');
+        setAuthLoading(false);
+        return;
+      }
+
+      if (data.access_token) {
+        localStorage.setItem('polygen_token', data.access_token);
+        setUser(data.user);
+        setAuthModalOpen(false);
+        setAuthPassword('');
+        setAuthEmail('');
+        setMessage(`Welcome back, ${data.user.email}!`);
+      }
+    } catch {
+      setAuthError('Unable to connect to PolyGen backend. Please verify the server is running.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignup = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthError(null);
+
+    if (authPassword.length < 8) {
+      setAuthError('Password must contain at least 8 characters.');
+      return;
+    }
+
+    if (authPassword !== authConfirmPassword) {
+      setAuthError('Passwords do not match.');
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: authEmail.trim(),
+          password: authPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setAuthError(data.detail || 'Signup failed. Please try a different email address.');
+        setAuthLoading(false);
+        return;
+      }
+
+      if (data.access_token) {
+        localStorage.setItem('polygen_token', data.access_token);
+        setUser(data.user);
+        setAuthModalOpen(false);
+        setAuthPassword('');
+        setAuthConfirmPassword('');
+        setAuthEmail('');
+        setMessage(`Account created! Welcome to PolyGen, ${data.user.email}!`);
+      }
+    } catch {
+      setAuthError('Unable to connect to PolyGen backend. Please verify the server is running.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('polygen_token');
+    setUser(null);
+    if (activeView === 'profile') {
+      setActiveView('studio');
+    }
+    setMessage('Logged out successfully.');
+  };
+
+  // Creations state
   const [selectedCreationId, setSelectedCreationId] = useState<number | null>(null);
   const [savedCreations, setSavedCreations] = useState<SavedCreation[]>(() => {
     try {
@@ -196,18 +461,93 @@ function App() {
       return [];
     }
   });
+  const [creationsLoading, setCreationsLoading] = useState(false);
+  const [creationsError, setCreationsError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Save creations whenever the collection changes.
-  useEffect(() => {
+  // Load creations from cloud when user is logged in
+  const loadCreations = async (currentUser: AuthUser | null) => {
+    if (!currentUser) return;
+    const token = localStorage.getItem('polygen_token');
+    if (!token) return;
+
+    setCreationsLoading(true);
+    setCreationsError(null);
     try {
-      localStorage.setItem(
-        'polygen-creations',
-        JSON.stringify(savedCreations)
-      );
-    } catch (error) {
-      console.error('Unable to save creations in browser storage:', error);
+      const response = await fetch(`${API_BASE_URL}/api/creations`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok && data.success && Array.isArray(data.creations)) {
+        setSavedCreations(data.creations);
+      } else {
+        setCreationsError(data.detail || 'Failed to load your cloud creations.');
+      }
+    } catch (err) {
+      console.error('Network error loading cloud creations:', err);
+      setCreationsError('Could not connect to PolyGen backend to load creations.');
+    } finally {
+      setCreationsLoading(false);
     }
-  }, [savedCreations]);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    const token = localStorage.getItem('polygen_token');
+    if (!token) return;
+
+    let ignore = false;
+    // oxlint-disable-next-line react/set-state-in-effect
+    setCreationsLoading(true);
+    setCreationsError(null);
+
+    fetch(`${API_BASE_URL}/api/creations`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!ignore) {
+          if (data.success && Array.isArray(data.creations)) {
+            setSavedCreations(data.creations);
+          } else {
+            setCreationsError(data.detail || 'Failed to load your cloud creations.');
+          }
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          console.error('Network error loading cloud creations:', err);
+          setCreationsError('Could not connect to PolyGen backend to load creations.');
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setCreationsLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [user]);
+
+  // Persist guest creations to localStorage only when user is NOT logged in
+  useEffect(() => {
+    if (!user) {
+      try {
+        localStorage.setItem(
+          'polygen-creations',
+          JSON.stringify(savedCreations)
+        );
+      } catch (error) {
+        console.error('Unable to save creations in browser storage:', error);
+      }
+    }
+  }, [savedCreations, user]);
 
   // Create geometry for each supported shape.
   const createGeometry = (shape: ShapeType): THREE.BufferGeometry => {
@@ -265,7 +605,7 @@ function App() {
     const camera = new THREE.PerspectiveCamera(
       45,
       Math.max(container.clientWidth, 1) /
-        Math.max(container.clientHeight, 1),
+      Math.max(container.clientHeight, 1),
       0.1,
       100
     );
@@ -455,6 +795,144 @@ function App() {
     }));
   };
 
+  // Validate an uploaded image with the FastAPI backend and show its preview.
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setImageStatus('Unsupported image type. Please choose PNG, JPG or WebP.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setImageStatus('Image is too large. Please choose a file smaller than 8 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    setImageStatus('Checking image with PolyGen backend...');
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string'
+          ? resolve(reader.result)
+          : reject(new Error('Could not read the selected image.'));
+        reader.onerror = () => reject(new Error('Could not read the selected image.'));
+        reader.readAsDataURL(file);
+      });
+
+      const base64Image = dataUrl.split(',')[1];
+      const response = await fetch('http://127.0.0.1:8000/api/image/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: file.type,
+          image_base64: base64Image,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'The backend could not validate this image.');
+      }
+
+      setImagePreview(dataUrl);
+      setImageName(file.name);
+      setImageStatus(`Image verified by backend · ${(result.size_bytes / 1024).toFixed(1)} KB`);
+    } catch (error) {
+      console.error('Image upload error:', error);
+      setImageStatus(error instanceof Error ? error.message : 'Image upload failed.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+
+  // Generate a basic image-based 3D prototype.
+  // This maps the uploaded image onto a sphere.
+  const handleGenerateImageModel = () => {
+    if (!imagePreview) {
+      setImageStatus('Please upload an image first.');
+      return;
+    }
+
+    const currentMesh = meshRef.current;
+
+    if (!currentMesh) {
+      setImageStatus('3D viewer is not ready.');
+      return;
+    }
+
+    const loader = new THREE.TextureLoader();
+
+    loader.load(
+      imagePreview,
+      (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 8;
+
+        // Replace current geometry with a sphere.
+        currentMesh.geometry.dispose();
+        currentMesh.geometry = new THREE.SphereGeometry(
+          0.9,
+          64,
+          48
+        );
+
+        currentMesh.scale.set(1, 1, 1);
+        currentMesh.rotation.set(0, 0, 0);
+
+        // Apply uploaded image as sphere texture.
+        const material = currentMesh.material;
+
+        if (material instanceof THREE.MeshStandardMaterial) {
+          if (material.map) {
+            material.map.dispose();
+          }
+
+          material.map = texture;
+          material.color.set('#FFFFFF');
+          material.roughness = 0.62;
+          material.metalness = 0.02;
+          material.needsUpdate = true;
+        }
+
+        const newDimensions = {
+          width: '1.80',
+          height: '1.80',
+          depth: '1.80'
+        };
+
+        setCurrentShape('sphere');
+        setDimensions(newDimensions);
+        setColor('#FFFFFF');
+
+        setObjectName('Image-based 3D prototype');
+        setSelectedCreationId(null);
+        setPrompt(`Image prototype: ${imageName}`);
+
+        setMessage(
+          'Image-based 3D prototype generated successfully!'
+        );
+
+        setImageStatus(
+          '3D prototype generated from uploaded image.'
+        );
+      },
+      undefined,
+      (error) => {
+        console.error('Image texture error:', error);
+
+        setImageStatus(
+          'Unable to generate prototype. Try another image.'
+        );
+      }
+    );
+  };
+
+
   // Generate a procedural object from the prompt.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -464,69 +942,81 @@ function App() {
       return;
     }
 
-    const text = prompt.trim().toLowerCase();
+    const normalizedText = normalizePrompt(prompt);
+    const promptWords = new Set(normalizedText.split(' '));
 
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-        }),
-      });
+    // A modifier-only prompt should update the currently displayed object.
+    // Examples: "Narrow", "Patla", "पतला", "Tall", "Chhota".
+    const containsShapeWord = promptHasAny(promptWords, [
+      'sphere', 'ball', 'football', 'basketball', 'globe', 'gola', 'gend', 'गोला', 'गोल', 'गेंद',
+      'cylinder', 'pipe', 'tube', 'belan', 'बेलन',
+      'cone', 'funnel', 'shanku', 'शंकु',
+      'torus', 'ring', 'donut', 'chhalla', 'छल्ला',
+      'cube', 'box', 'cuboid', 'block', 'ghan', 'dabba', 'डिब्बा', 'डब्बा', 'घन',
+    ]);
+    const containsDimensionWord = promptHasAny(promptWords, [
+      'small', 'tiny', 'little', 'chhota', 'chhoti', 'chhote', 'छोटा', 'छोटी', 'छोटे', 'नन्हा', 'नन्ही',
+      'large', 'big', 'huge', 'bada', 'badi', 'bade', 'बड़ा', 'बड़ी', 'बड़े', 'विशाल',
+      'tall', 'long', 'lamba', 'lambi', 'ऊँचा', 'ऊंचा', 'लंबा', 'लम्बा', 'लंबी', 'लम्बी',
+      'short', 'नाटा', 'wide', 'broad', 'chauda', 'chaudi', 'चौड़ा', 'चौड़ी', 'चौड़ी',
+      'narrow', 'patla', 'patli', 'पतला', 'पतली', 'thick', 'thicker', 'mota', 'moti', 'मोटा', 'मोटी',
+      'thin', 'thinner',
+    ]);
+    const isModifierOnlyPrompt = !containsShapeWord && containsDimensionWord;
 
-      if (!response.ok) {
-        throw new Error('Backend request failed');
+    // Full prompts are analysed by FastAPI. Modifier-only prompts stay local
+    // because they modify the object that is already visible in the viewer.
+    let backendAnalysis: {
+      shape: ShapeType;
+      color: string | null;
+      dimensions: Dimensions;
+    } | null = null;
+
+    if (!isModifierOnlyPrompt) {
+      try {
+        const response = await fetch('http://127.0.0.1:8000/api/prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: prompt.trim() }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          setMessage(data.message || 'The backend could not understand this prompt.');
+          return;
+        }
+
+        if (
+          !['cube', 'sphere', 'cylinder', 'cone', 'torus'].includes(data.shape) ||
+          (data.color !== null && typeof data.color !== 'string') ||
+          !data.dimensions ||
+          !['width', 'height', 'depth'].every((key) =>
+            Number.isFinite(Number(data.dimensions[key]))
+          )
+        ) {
+          throw new Error('Backend returned an invalid object description.');
+        }
+
+        backendAnalysis = {
+          shape: data.shape as ShapeType,
+          color: data.color,
+          dimensions: {
+            width: Number(data.dimensions.width).toFixed(2),
+            height: Number(data.dimensions.height).toFixed(2),
+            depth: Number(data.dimensions.depth).toFixed(2),
+          },
+        };
+        console.log('PolyGen Backend Analysis:', data);
+      } catch (error) {
+        console.error('Backend connection error:', error);
+        setMessage('Unable to connect to PolyGen backend. Check that FastAPI is running.');
+        return;
       }
-
-      const data = await response.json();
-      console.log('PolyGen Backend Response:', data);
-    } catch (error) {
-      console.error('Backend connection error:', error);
-      setMessage('Unable to connect to PolyGen backend.');
-      return;
     }
 
-    // Detect shape from prompt.
-    let shape: ShapeType;
-    if (
-      text.includes('sphere') ||
-      text.includes('ball') ||
-      text.includes('football') ||
-      text.includes('basketball') ||
-      text.includes('globe')
-    ) {
-      shape = 'sphere';
-    } else if (
-      text.includes('cylinder') ||
-      text.includes('pipe') ||
-      text.includes('tube')
-    ) {
-      shape = 'cylinder';
-    } else if (
-      text.includes('cone') ||
-      text.includes('funnel')
-    ) {
-      shape = 'cone';
-    } else if (
-      text.includes('torus') ||
-      text.includes('ring') ||
-      text.includes('donut')
-    ) {
-      shape = 'torus';
-    } else if (
-      text.includes('cube') ||
-      text.includes('box') ||
-      text.includes('cuboid') ||
-      text.includes('block')
-    ) {
-      shape = 'cube';
-    } else {
-      setMessage('Try a supported shape: cube, sphere, cylinder, cone or torus.');
-      return;
-    }
+    // The backend identifies the shape for full prompts. Modifier-only
+    // prompts keep the shape that is already visible in the viewer.
+    const shape: ShapeType = backendAnalysis?.shape ?? currentShape;
 
     const currentMesh = meshRef.current;
     if (!currentMesh) {
@@ -534,24 +1024,31 @@ function App() {
       return;
     }
 
-    // Detect colour from prompt.
-    let detectedColor = color;
-    if (text.includes('red')) {
-      detectedColor = '#FF0000';
-    } else if (text.includes('blue')) {
-      detectedColor = '#0000FF';
-    } else if (text.includes('green')) {
-      detectedColor = '#008000';
-    } else if (text.includes('yellow')) {
-      detectedColor = '#FFFF00';
-    } else if (text.includes('orange')) {
-      detectedColor = '#FFA500';
-    } else if (text.includes('purple')) {
-      detectedColor = '#800080';
-    } else if (text.includes('black')) {
-      detectedColor = '#000000';
-    } else if (text.includes('white')) {
-      detectedColor = '#FFFFFF';
+    // The backend's colour is authoritative for full prompts. Local colour
+    // matching is retained for modifier-only updates.
+    let detectedColor = backendAnalysis?.color ?? color;
+    if (!backendAnalysis) {
+      if (promptHasAny(promptWords, ['red', 'laal', 'लाल'])) {
+        detectedColor = '#FF0000';
+      } else if (promptHasAny(promptWords, ['blue', 'neela', 'nila', 'नीला', 'नीली'])) {
+        detectedColor = '#0000FF';
+      } else if (promptHasAny(promptWords, ['green', 'hara', 'हरा', 'हरी'])) {
+        detectedColor = '#008000';
+      } else if (promptHasAny(promptWords, ['yellow', 'peela', 'पीला', 'पीली'])) {
+        detectedColor = '#FFFF00';
+      } else if (promptHasAny(promptWords, ['orange', 'narangi', 'नारंगी'])) {
+        detectedColor = '#FFA500';
+      } else if (
+        promptHasAny(promptWords, [
+          'purple', 'baingani', 'jamuni', 'बैंगनी', 'जामुनी',
+        ])
+      ) {
+        detectedColor = '#800080';
+      } else if (promptHasAny(promptWords, ['black', 'kala', 'काला', 'काली'])) {
+        detectedColor = '#000000';
+      } else if (promptHasAny(promptWords, ['white', 'safed', 'सफेद'])) {
+        detectedColor = '#FFFFFF';
+      }
     }
     setColor(detectedColor);
 
@@ -564,29 +1061,22 @@ function App() {
       currentMesh.material.color.set(detectedColor);
     }
 
-    const newShapeDimensions = getDimensions(shape);
-    const newObjectName = `Procedural ${shape}`;
-
-    let newCreationId = Date.now();
-    while (savedCreations.some((item) => item.id === newCreationId)) {
-      newCreationId += 1;
-    }
-
-    const newCreation: SavedCreation = {
-      id: newCreationId,
-      name: newObjectName,
+    // Apply size and proportion words such as large, small, tall and wide.
+    const newShapeDimensions = backendAnalysis?.dimensions ?? getPromptDimensions(
       shape,
-      color: detectedColor,
-      dimensions: newShapeDimensions,
-      prompt: prompt.trim(),
-    };
-
-    setSavedCreations((previous) => [...previous, newCreation]);
-    setSelectedCreationId(newCreationId);
+      promptWords,
+      isModifierOnlyPrompt ? dimensions : undefined
+    );
+    const newObjectName = `Procedural ${shape}`;
+    setSelectedCreationId(null);
     setCurrentShape(shape);
     setObjectName(newObjectName);
     setDimensions(newShapeDimensions);
-    setMessage(`Procedural ${shape} preview created and added to My Creations!`);
+    setMessage(
+      isModifierOnlyPrompt
+        ? `Updated the current ${shape} dimensions! Click "Save creation" to save.`
+        : `Procedural ${shape} preview created! Click "Save creation" to save to My Creations.`
+    );
   };
 
   // Export a Three.js object as a binary GLB file.
@@ -673,13 +1163,89 @@ function App() {
   };
 
   // Add a new creation or update the creation currently open in Studio.
-  const saveCreation = () => {
+  const saveCreation = async () => {
     const trimmedName = objectName.trim();
     if (!trimmedName) {
       setMessage('Please enter a name before saving your creation.');
       return;
     }
 
+    const token = localStorage.getItem('polygen_token');
+
+    // Cloud storage flow when user is authenticated
+    if (user && token) {
+      setIsSaving(true);
+      try {
+        const isExisting =
+          selectedCreationId !== null &&
+          savedCreations.some((item) => item.id === selectedCreationId);
+
+        if (isExisting) {
+          // Update existing creation via PUT /api/creations/{id}
+          const response = await fetch(`${API_BASE_URL}/api/creations/${selectedCreationId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: trimmedName,
+              shape: currentShape,
+              color,
+              dimensions,
+              prompt: prompt.trim(),
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            setMessage(data.detail || 'Could not update creation on cloud.');
+            return;
+          }
+
+          const updated = data.creation;
+          setSavedCreations((previous) =>
+            previous.map((item) => (item.id === selectedCreationId ? updated : item))
+          );
+          setMessage(`"${trimmedName}" updated in cloud storage successfully!`);
+        } else {
+          // Create new creation via POST /api/creations
+          const response = await fetch(`${API_BASE_URL}/api/creations`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: trimmedName,
+              shape: currentShape,
+              color,
+              dimensions,
+              prompt: prompt.trim(),
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            setMessage(data.detail || 'Could not save creation to cloud.');
+            return;
+          }
+
+          const newCreation = data.creation;
+          setSavedCreations((previous) => [newCreation, ...previous]);
+          setSelectedCreationId(newCreation.id);
+          setMessage(`"${trimmedName}" saved to cloud storage successfully!`);
+        }
+      } catch (err) {
+        console.error('Error saving to cloud:', err);
+        setMessage('Network error: Unable to reach PolyGen cloud backend.');
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    // Guest fallback (local storage)
     const isExistingCreation =
       selectedCreationId !== null &&
       savedCreations.some((item) => item.id === selectedCreationId);
@@ -699,10 +1265,9 @@ function App() {
           item.id === selectedCreationId ? updatedCreation : item
         )
       );
-      setMessage('Saved creation updated successfully!');
+      setMessage('Saved locally. Sign in to sync your creations to the cloud!');
     } else {
       let creationId = Date.now();
-      // Avoid an ID collision if two creations are saved in the same millisecond.
       while (savedCreations.some((item) => item.id === creationId)) {
         creationId += 1;
       }
@@ -718,7 +1283,7 @@ function App() {
 
       setSavedCreations((previous) => [...previous, newCreation]);
       setSelectedCreationId(creationId);
-      setMessage('Creation added successfully!');
+      setMessage('Saved locally. Sign in to sync your creations to the cloud!');
     }
   };
 
@@ -756,7 +1321,37 @@ function App() {
   };
 
   // Delete a saved object.
-  const deleteCreation = (id: number) => {
+  const deleteCreation = async (id: number) => {
+    const token = localStorage.getItem('polygen_token');
+
+    if (user && token) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/creations/${id}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          setMessage(data.detail || 'Could not delete creation from cloud.');
+          return;
+        }
+
+        setSavedCreations((previous) => previous.filter((item) => item.id !== id));
+        if (selectedCreationId === id) {
+          setSelectedCreationId(null);
+        }
+        setMessage('Creation deleted from cloud.');
+      } catch (err) {
+        console.error('Error deleting creation:', err);
+        setMessage('Network error: Could not delete creation.');
+      }
+      return;
+    }
+
+    // Guest delete
     setSavedCreations((previous) =>
       previous.filter((creation) => creation.id !== id)
     );
@@ -780,9 +1375,8 @@ function App() {
 
           <button
             type="button"
-            className={`nav-item ${
-              activeView === 'studio' ? 'active' : ''
-            }`}
+            className={`nav-item ${activeView === 'studio' ? 'active' : ''
+              }`}
             onClick={() => setActiveView('studio')}
           >
             <PanelsTopLeft size={18} strokeWidth={1.8} />
@@ -791,9 +1385,8 @@ function App() {
 
           <button
             type="button"
-            className={`nav-item ${
-              activeView === 'creations' ? 'active' : ''
-            }`}
+            className={`nav-item ${activeView === 'creations' ? 'active' : ''
+              }`}
             onClick={() => setActiveView('creations')}
           >
             <Layers3 size={18} strokeWidth={1.8} />
@@ -802,6 +1395,17 @@ function App() {
               {savedCreations.length}
             </span>
           </button>
+
+          {user && (
+            <button
+              type="button"
+              className={`nav-item ${activeView === 'profile' ? 'active' : ''}`}
+              onClick={() => setActiveView('profile')}
+            >
+              <User size={18} strokeWidth={1.8} />
+              User profile
+            </button>
+          )}
 
           <button
             type="button"
@@ -816,11 +1420,77 @@ function App() {
         </div>
 
         <div className="sidebar-bottom">
-          <div className="profile-mark">P</div>
-          <div>
-            <strong>PolyGen Workspace</strong>
-            <small>Personal studio · v0.1</small>
+          <div
+            className="profile-mark"
+            style={{
+              background: user ? '#D7E5DC' : '#E5ECE6',
+              color: '#252B27',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {user ? user.email.charAt(0).toUpperCase() : 'P'}
           </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <strong
+              style={{
+                display: 'block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: '12px',
+              }}
+              title={user ? user.email : 'PolyGen Guest'}
+            >
+              {user ? user.email : 'PolyGen Guest'}
+            </strong>
+            <small style={{ color: user ? '#587363' : '#68716B' }}>
+              {user ? 'Verified User · v0.1' : 'Personal studio · v0.1'}
+            </small>
+          </div>
+          {user ? (
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Logout"
+              aria-label="Logout"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#68716B',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <LogOut size={16} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('login');
+                setAuthError(null);
+                setAuthModalOpen(true);
+              }}
+              title="Log in"
+              aria-label="Log in"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#587363',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <LogIn size={16} />
+            </button>
+          )}
         </div>
       </aside>
 
@@ -837,11 +1507,63 @@ function App() {
             </p>
           </div>
 
-          <div className="header-actions">
+          <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span className="save-status">
               <span className="status-dot" />
               Local workspace
             </span>
+
+            {user ? (
+              <>
+                <div className="user-badge" title={`Signed in as ${user.email}`}>
+                  <User size={13} color="#587363" />
+                  <span>{user.email}</span>
+                </div>
+                <button
+                  type="button"
+                  className={`auth-action-btn ${activeView === 'profile' ? 'primary' : ''}`}
+                  onClick={() => setActiveView(activeView === 'profile' ? 'studio' : 'profile')}
+                >
+                  <ShieldCheck size={14} />
+                  Profile
+                </button>
+                <button
+                  type="button"
+                  className="auth-action-btn"
+                  onClick={handleLogout}
+                  title="Sign out of PolyGen"
+                >
+                  <LogOut size={14} />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="auth-action-btn"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setAuthError(null);
+                    setAuthModalOpen(true);
+                  }}
+                >
+                  <LogIn size={14} />
+                  Log in
+                </button>
+                <button
+                  type="button"
+                  className="auth-action-btn primary"
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setAuthError(null);
+                    setAuthModalOpen(true);
+                  }}
+                >
+                  Sign up
+                </button>
+              </>
+            )}
           </div>
         </header>
 
@@ -873,9 +1595,14 @@ function App() {
                     type="button"
                     onClick={saveCreation}
                     className="create-button"
+                    disabled={isSaving}
                   >
                     <FolderOpen size={15} />
-                    {selectedCreationId !== null ? 'Save changes' : 'Save creation'}
+                    {isSaving
+                      ? 'Saving...'
+                      : selectedCreationId !== null
+                        ? 'Save changes'
+                        : 'Save creation'}
                   </button>
 
                   <button
@@ -921,7 +1648,7 @@ function App() {
                 <textarea
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
-                  placeholder="Try: Create a sphere, cylinder, cone, torus or cube..."
+                  placeholder="Try: Create a red sphere / laal gola / नीला घन / green cylinder..."
                 />
 
                 <div className="idea-submit-row">
@@ -932,6 +1659,53 @@ function App() {
                   </button>
                 </div>
               </form>
+
+              <div style={{ marginTop: '22px', paddingTop: '18px', borderTop: '1px solid #E2E6E1' }}>
+                <p className="eyebrow">IMAGE TO 3D / PREPARATION</p>
+                <h3 style={{ margin: '6px 0 12px', fontSize: '16px' }}>Upload a reference image</h3>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleImageUpload}
+                  aria-label="Upload a reference image"
+                />
+                <p style={{ color: '#68716B', fontSize: '12px', margin: '9px 0' }}>{imageStatus}</p>
+                {imagePreview && (
+                  <div style={{ marginTop: '12px' }}>
+                    <img
+                      src={imagePreview}
+                      alt="Uploaded image preview"
+                      style={{ display: 'block', maxWidth: '100%', maxHeight: '240px', objectFit: 'contain', borderRadius: '10px', border: '1px solid #E2E6E1', background: '#FFFFFF' }}
+                    />
+                    <p style={{ color: '#68716B', fontSize: '12px', marginTop: '7px' }}>{imageName}</p>
+
+
+                    <button
+                      type="button"
+                      className="create-button"
+                      onClick={handleGenerateImageModel}
+                      style={{ marginTop: '10px' }}
+                    >
+                      <Sparkles size={15} />
+                      Generate basic 3D prototype
+                    </button>
+
+                    <p
+                      style={{
+                        color: '#68716B',
+                        fontSize: '11px',
+                        lineHeight: 1.5,
+                        marginTop: '8px'
+                      }}
+                    >
+                      Creates a basic sphere with your uploaded image
+                      applied as a texture. This is not full AI
+                      object reconstruction.
+                    </p>
+
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1053,17 +1827,106 @@ function App() {
         {/* My Creations view */}
         {activeView === 'creations' && (
           <section style={{ padding: '30px 0' }}>
-            <div style={{ marginBottom: '25px' }}>
-              <p className="eyebrow">YOUR WORKSPACE / LIBRARY</p>
-              <h2 style={{ fontSize: '28px', margin: '8px 0' }}>
-                My creations
-              </h2>
-              <p style={{ color: '#68716B' }}>
-                Your saved 3D objects, all in one place.
-              </p>
+            <div
+              style={{
+                marginBottom: '25px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <p className="eyebrow">
+                  {user ? 'CLOUD WORKSPACE / LIBRARY' : 'LOCAL WORKSPACE / LIBRARY'}
+                </p>
+                <h2 style={{ fontSize: '28px', margin: '8px 0' }}>
+                  My creations
+                </h2>
+                <p style={{ color: '#68716B', margin: 0 }}>
+                  {user
+                    ? `Your cloud-stored 3D creations (${user.email}).`
+                    : 'Your saved 3D objects in local browser storage.'}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {user ? (
+                  <>
+                    <span className="cloud-badge" title="Creations synced to SQLite backend">
+                      <Cloud size={14} />
+                      Cloud Storage
+                    </span>
+                    <button
+                      type="button"
+                      className="auth-action-btn"
+                      onClick={() => loadCreations(user)}
+                      disabled={creationsLoading}
+                      title="Reload creations from cloud"
+                    >
+                      <RefreshCw size={13} className={creationsLoading ? 'spin' : ''} />
+                      {creationsLoading ? 'Syncing...' : 'Refresh'}
+                    </button>
+                  </>
+                ) : (
+                  <span
+                    className="cloud-badge"
+                    style={{ background: '#FFF7E6', borderColor: '#FFE2A8', color: '#8A5D00' }}
+                  >
+                    Local storage only
+                  </span>
+                )}
+              </div>
             </div>
 
-            {savedCreations.length === 0 ? (
+            {!user && (
+              <div className="guest-banner">
+                <div>
+                  <strong style={{ display: 'block', color: '#5A4305', fontSize: '13px' }}>
+                    Want cloud access across all devices?
+                  </strong>
+                  <p className="guest-banner-text">
+                    Sign in or create an account to save and access your 3D creations securely from our cloud database.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="auth-action-btn primary"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setAuthModalOpen(true);
+                  }}
+                >
+                  <LogIn size={14} />
+                  Sign in to sync
+                </button>
+              </div>
+            )}
+
+            {creationsLoading ? (
+              <div className="creations-loading-box">
+                <RefreshCw size={32} className="spin" color="#8EAA9B" style={{ margin: '0 auto 12px' }} />
+                <h3 style={{ margin: '0 0 6px' }}>Loading your creations...</h3>
+                <p style={{ color: '#68716B', fontSize: '13px', margin: 0 }}>
+                  Retrieving your 3D assets from the PolyGen cloud database.
+                </p>
+              </div>
+            ) : creationsError ? (
+              <div className="creations-error-box">
+                <AlertCircle size={32} color="#B02A37" style={{ margin: '0 auto 10px' }} />
+                <h3 style={{ margin: '0 0 6px', color: '#B02A37' }}>Failed to load creations</h3>
+                <p className="creations-error-message">{creationsError}</p>
+                <button
+                  type="button"
+                  className="create-button"
+                  onClick={() => loadCreations(user)}
+                >
+                  <RefreshCw size={14} />
+                  Retry
+                </button>
+              </div>
+            ) : savedCreations.length === 0 ? (
               <div
                 style={{
                   background: '#FFFFFF',
@@ -1076,7 +1939,9 @@ function App() {
                 <Box size={35} color="#8EAA9B" />
                 <h3>No creations yet</h3>
                 <p style={{ color: '#68716B' }}>
-                  Create a 3D object in Studio and save it here.
+                  {user
+                    ? 'Create a 3D object in Studio and click "Save creation" to store it in the cloud.'
+                    : 'Create a 3D object in Studio and save it here.'}
                 </p>
                 <button
                   type="button"
@@ -1110,14 +1975,19 @@ function App() {
                     <h3 style={{ margin: '0 0 6px' }}>
                       {creation.name}
                     </h3>
-                    <p style={{ color: '#68716B', fontSize: '13px' }}>
+                    <p style={{ color: '#68716B', fontSize: '13px', margin: '0 0 6px' }}>
                       {creation.shape.toUpperCase()} · {creation.color}
                     </p>
+                    {creation.created_at && (
+                      <p style={{ color: '#8F9992', fontSize: '11px', margin: '0 0 12px' }}>
+                        Saved {new Date(creation.created_at).toLocaleDateString()}
+                      </p>
+                    )}
                     <div
                       style={{
                         display: 'flex',
                         gap: '8px',
-                        marginTop: '16px',
+                        marginTop: creation.created_at ? '0' : '16px',
                       }}
                     >
                       <button
@@ -1163,11 +2033,240 @@ function App() {
           </section>
         )}
 
+        {/* User Profile View */}
+        {activeView === 'profile' && (
+          <section style={{ padding: '30px 0' }}>
+            <div style={{ marginBottom: '25px', textAlign: 'center' }}>
+              <p className="eyebrow">ACCOUNT / SECURITY</p>
+              <h2 style={{ fontSize: '28px', margin: '8px 0' }}>User Profile</h2>
+              <p style={{ color: '#68716B' }}>Protected profile verified with JWT authentication.</p>
+            </div>
+
+            {user ? (
+              <div className="profile-card">
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    marginBottom: '20px',
+                    paddingBottom: '16px',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '54px',
+                      height: '54px',
+                      borderRadius: '50%',
+                      background: '#D7E5DC',
+                      color: '#252B27',
+                      fontSize: '22px',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {user.email.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '18px' }}>{user.email}</h3>
+                    <span style={{ fontSize: '12px', color: '#2E7D32', fontWeight: 600 }}>
+                      ● Active session verified
+                    </span>
+                  </div>
+                </div>
+
+                <div className="profile-field">
+                  <span className="profile-label">User ID</span>
+                  <span className="profile-value">#{user.id}</span>
+                </div>
+
+                <div className="profile-field">
+                  <span className="profile-label">Email Address</span>
+                  <span className="profile-value">{user.email}</span>
+                </div>
+
+                <div className="profile-field">
+                  <span className="profile-label">Authentication Method</span>
+                  <span className="profile-value">PBKDF2-HMAC-SHA256 & HS256 JWT</span>
+                </div>
+
+                {user.created_at && (
+                  <div className="profile-field">
+                    <span className="profile-label">Member Since</span>
+                    <span className="profile-value">
+                      {new Date(user.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                  <button
+                    type="button"
+                    className="create-button"
+                    onClick={() => setActiveView('studio')}
+                    style={{ flex: 1 }}
+                  >
+                    Back to Studio
+                  </button>
+                  <button
+                    type="button"
+                    className="create-button"
+                    onClick={handleLogout}
+                    style={{ background: '#F1F4F1', color: '#252B27' }}
+                  >
+                    <LogOut size={15} />
+                    Logout
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="profile-card" style={{ textAlign: 'center' }}>
+                <p>Please log in to view your protected user profile.</p>
+                <button
+                  type="button"
+                  className="create-button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setAuthError(null);
+                    setAuthModalOpen(true);
+                  }}
+                  style={{ marginTop: '16px' }}
+                >
+                  <LogIn size={15} />
+                  Sign In
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
         <footer className="studio-footer">
           <span>POLYGEN © 2026</span>
           <span>GENERATIVE TEXT-TO-3D ASSET PIPELINE</span>
         </footer>
       </main>
+
+      {/* Authentication Modal */}
+      {authModalOpen && (
+        <div
+          className="auth-modal-backdrop"
+          onClick={() => setAuthModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="auth-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="auth-modal-close"
+              onClick={() => setAuthModalOpen(false)}
+              aria-label="Close authentication modal"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="auth-tabs">
+              <button
+                type="button"
+                className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthError(null);
+                }}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                className={`auth-tab ${authMode === 'signup' ? 'active' : ''}`}
+                onClick={() => {
+                  setAuthMode('signup');
+                  setAuthError(null);
+                }}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {authError && <div className="auth-error">{authError}</div>}
+
+            <form
+              onSubmit={authMode === 'login' ? handleLogin : handleSignup}
+              className="auth-form"
+            >
+              <label>
+                Email address
+                <input
+                  type="email"
+                  required
+                  className="auth-input"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                Password
+                <input
+                  type="password"
+                  required
+                  minLength={authMode === 'signup' ? 8 : 1}
+                  className="auth-input"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  placeholder={
+                    authMode === 'signup'
+                      ? 'At least 8 characters'
+                      : 'Enter your password'
+                  }
+                />
+              </label>
+
+              {authMode === 'signup' && (
+                <label>
+                  Confirm Password
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    className="auth-input"
+                    value={authConfirmPassword}
+                    onChange={(event) => setAuthConfirmPassword(event.target.value)}
+                    placeholder="Confirm your password"
+                  />
+                </label>
+              )}
+
+              <button
+                type="submit"
+                className="auth-submit-btn"
+                disabled={authLoading}
+              >
+                {authLoading ? (
+                  'Processing...'
+                ) : authMode === 'login' ? (
+                  <>
+                    <LogIn size={16} />
+                    Sign In
+                  </>
+                ) : (
+                  <>
+                    <User size={16} />
+                    Create Account
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
