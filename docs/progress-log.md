@@ -1,4 +1,4 @@
-# PolyGen Daily Progress Log
+﻿# PolyGen Daily Progress Log
 
 ## 11 November 2026
 
@@ -95,3 +95,46 @@ All the above features were tested successfully.
 - Add confirmation modal or undo action for creation deletion.
 
 **Status:** Add, Modify, Save, Delete, and 3D Studio functionality fully operational and verified.
+
+---
+
+## Day 9 – 18 November 2026
+
+### Work Completed
+- Started and verified the FastAPI backend.
+- Tested multilingual prompt recognition in English, Hindi and Hinglish.
+- Verified sphere, cylinder, cone and torus recognition.
+- Verified colour detection for red, blue, green, yellow and purple.
+- Verified Hindi size modification using a small cone prompt.
+- Tested unsupported shape handling using a pyramid prompt.
+- Inspected frontend multilingual prompt handling.
+- Verified frontend and backend integration using "Ek laal gola banao".
+- Confirmed the red sphere appeared successfully in the 3D viewer.
+
+### Testing Results
+- FastAPI `/health`: Healthy.
+- Hinglish prompt recognition: Passed.
+- Hindi prompt recognition: Passed.
+- English prompt recognition: Passed.
+- Shape and colour detection: Passed.
+- Size detection: Passed.
+- Unsupported shape handling: Passed.
+- Frontend and backend integration: Passed.
+- `npm run build`: Successful.
+- TypeScript compilation: Successful.
+
+### Observations
+- Hindi text in PowerShell's `received_prompt` output appears incorrectly encoded, although backend recognition works.
+- Vite reports a non-blocking JavaScript bundle size warning (larger than 500 kB).
+- No source code was modified during this testing session.
+
+### Pending Work
+- Improve multilingual prompt vocabulary and consistency between frontend and backend.
+- Investigate and fix Hindi UTF-8 display/encoding.
+- Connect an actual AI Text-to-3D generation backend.
+- Explore image-to-3D generation.
+- Consider code splitting to reduce frontend bundle size.
+- Add deletion confirmation or undo functionality.
+
+**Status:** Existing multilingual prompt recognition and frontend-backend integration successfully tested.
+
