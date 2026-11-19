@@ -138,3 +138,47 @@ All the above features were tested successfully.
 
 **Status:** Existing multilingual prompt recognition and frontend-backend integration successfully tested.
 
+
+---
+
+## Day 10 – 18 November 2026
+
+### Work Completed
+- Inspected the existing multilingual prompt vocabulary in `backend/main.py`.
+- Created a backup of the backend file before editing.
+- Expanded shape aliases for English, Hindi and Hinglish prompts.
+- Added additional vocabulary for sphere, cylinder, cone, torus and cube.
+- Preserved the existing colour aliases and shape-generation logic.
+- Investigated Hindi UTF-8 response handling.
+- Confirmed that Hindi text is correctly received and returned by the backend; the remaining display issue is specific to PowerShell output.
+- Tested the newly added vocabulary through the FastAPI `/api/prompt` endpoint.
+
+### Testing Results
+- Blue orb → Sphere: Passed.
+- हरा घनाकार → Cube: Passed.
+- Laal roll → Cylinder: Passed.
+- Yellow conical → Cone: Passed.
+- Purple doughnut → Torus: Passed.
+- Green cubic → Cube: Passed.
+- Python syntax check (`py_compile`): Passed.
+- TypeScript compilation: Passed.
+- Vite production build: Successful.
+- Frontend build completed with a non-blocking bundle-size warning.
+
+### Observations
+- English, Hindi and Hinglish shape vocabulary has been expanded.
+- Existing colour recognition remains functional in tested prompts.
+- Backend UTF-8 processing works correctly.
+- Frontend JavaScript bundle is larger than 500 kB and may benefit from code splitting.
+- Current generation remains procedural and keyword-based, not genuine AI Text-to-3D generation.
+
+### Pending Work
+- Test the updated prompts in the browser and verify the 3D viewer.
+- Improve multilingual colour and dimension vocabulary.
+- Explore frontend bundle optimization.
+- Research actual AI Text-to-3D provider integration.
+- Explore image-to-3D generation.
+- Consider deletion confirmation or undo functionality.
+
+**Status:** Multilingual shape vocabulary expanded and all six new prompt tests passed. Backend syntax and frontend production build verified.
+

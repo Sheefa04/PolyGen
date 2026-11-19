@@ -775,26 +775,33 @@ def contains(words: set[str], aliases: tuple[str, ...]):
 SHAPE_ALIASES = {
 
     "sphere": (
-        "sphere", "ball", "football", "basketball", "globe",
-        "gola", "gend", "गोला", "गोल", "गेंद"
+        "sphere", "spherical", "ball", "orb",
+        "football", "basketball", "globe",
+        "gola", "gend", "golaakar",
+        "गोला", "गोल", "गेंद", "गोलाकार"
     ),
 
     "cylinder": (
-        "cylinder", "pipe", "tube", "belan", "बेलन"
+        "cylinder", "cylindrical", "pipe", "tube", "roll",
+        "belan", "nal", "बेलन", "नली", "पाइप"
     ),
 
     "cone": (
-        "cone", "funnel", "shanku", "शंकु"
+        "cone", "conical", "funnel", "icecream",
+        "waffle", "shanku", "शंकु"
     ),
 
     "torus": (
-        "torus", "ring", "donut", "chhalla", "छल्ला"
+        "torus", "ring", "donut", "doughnut",
+        "ring-shaped", "chhalla", "छल्ला"
     ),
 
     "cube": (
-        "cube", "box", "cuboid", "block", "ghan",
-        "dabba", "डिब्बा", "डब्बा", "घन"
+        "cube", "cubic", "box", "cuboid", "block",
+        "box-shaped", "ghan", "dabba",
+        "डिब्बा", "डब्बा", "घन", "घनाकार"
     ),
+
 }
 
 
