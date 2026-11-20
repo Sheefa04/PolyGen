@@ -104,9 +104,12 @@ function getPromptDimensions(
   let depth = Number(base.depth);
 
   // Overall object size.
+
+  // Overall object size.
   if (
     promptHasAny(words, [
-      'small', 'tiny', 'little', 'chhota', 'chhoti', 'chhote',
+      'small', 'smaller', 'tiny', 'little', 'shrink',
+      'chhota', 'chhoti', 'chhote',
       'छोटा', 'छोटी', 'छोटे', 'नन्हा', 'नन्ही',
     ])
   ) {
@@ -115,7 +118,8 @@ function getPromptDimensions(
     depth *= 0.65;
   } else if (
     promptHasAny(words, [
-      'large', 'big', 'huge', 'bada', 'badi', 'bade',
+      'large', 'larger', 'big', 'bigger', 'huge', 'increase',
+      'bada', 'badi', 'bade',
       'बड़ा', 'बड़ी', 'बड़े', 'विशाल',
     ])
   ) {
@@ -140,15 +144,22 @@ function getPromptDimensions(
     height *= 0.75;
   }
 
+
   // Width.
   if (
     promptHasAny(words, [
-      'wide', 'broad', 'chauda', 'chaudi', 'चौड़ा', 'चौड़ी', 'चौड़ी',
+      'wide', 'wider', 'widen',
+      'broad', 'broader',
+      'chauda', 'chaudi',
+      'चौड़ा', 'चौड़ी', 'चौड़ी',
     ])
   ) {
     width *= 1.35;
   } else if (
-    promptHasAny(words, ['narrow', 'patla', 'patli', 'पतला', 'पतली'])
+    promptHasAny(words, [
+      'narrow', 'narrower',
+      'patla', 'patli', 'पतला', 'पतली',
+    ])
   ) {
     width *= 0.75;
   }
@@ -954,15 +965,42 @@ function App() {
       'torus', 'ring', 'donut', 'chhalla', 'छल्ला',
       'cube', 'box', 'cuboid', 'block', 'ghan', 'dabba', 'डिब्बा', 'डब्बा', 'घन',
     ]);
-    const containsDimensionWord = promptHasAny(promptWords, [
-      'small', 'tiny', 'little', 'chhota', 'chhoti', 'chhote', 'छोटा', 'छोटी', 'छोटे', 'नन्हा', 'नन्ही',
-      'large', 'big', 'huge', 'bada', 'badi', 'bade', 'बड़ा', 'बड़ी', 'बड़े', 'विशाल',
-      'tall', 'long', 'lamba', 'lambi', 'ऊँचा', 'ऊंचा', 'लंबा', 'लम्बा', 'लंबी', 'लम्बी',
-      'short', 'नाटा', 'wide', 'broad', 'chauda', 'chaudi', 'चौड़ा', 'चौड़ी', 'चौड़ी',
-      'narrow', 'patla', 'patli', 'पतला', 'पतली', 'thick', 'thicker', 'mota', 'moti', 'मोटा', 'मोटी',
-      'thin', 'thinner',
+
+const containsDimensionWord = promptHasAny(promptWords, [
+  'small', 'tiny', 'little', 'smaller', 'shrink',
+  'chhota', 'chhoti', 'chhote', 'छोटा', 'छोटी', 'छोटे', 'नन्हा', 'नन्ही',
+
+  'large', 'big', 'huge', 'larger', 'bigger', 'increase',
+  'bada', 'badi', 'bade', 'बड़ा', 'बड़ी', 'बड़े', 'विशाल',
+
+  'tall', 'taller', 'long', 'longer',
+  'lamba', 'lambi', 'ऊँचा', 'ऊंचा', 'लंबा', 'लम्बा', 'लंबी', 'लम्बी',
+
+  'short', 'shorter', 'नाटा',
+
+  'wide', 'wider', 'widen', 'broad', 'broader',
+  'chauda', 'chaudi', 'चौड़ा', 'चौड़ी', 'चौड़ी',
+
+  'narrow', 'narrower', 'patla', 'patli', 'पतला', 'पतली',
+
+  'thick', 'thicker', 'thicken', 'mota', 'moti', 'मोटा', 'मोटी',
+
+  'thin', 'thinner', 'पतला', 'पतली',
+]);
+
+    const containsColorWord = promptHasAny(promptWords, [
+      'red', 'laal', 'लाल',
+      'blue', 'neela', 'nila', 'नीला', 'नीली',
+      'green', 'hara', 'हरा', 'हरी',
+      'yellow', 'peela', 'पीला', 'पीली',
+      'orange', 'narangi', 'नारंगी',
+      'purple', 'baingani', 'jamuni', 'बैंगनी', 'जामुनी',
+      'black', 'kala', 'काला', 'काली',
+      'white', 'safed', 'सफेद',
     ]);
-    const isModifierOnlyPrompt = !containsShapeWord && containsDimensionWord;
+
+    const isModifierOnlyPrompt =
+      !containsShapeWord && (containsDimensionWord || containsColorWord);
 
     // Full prompts are analysed by FastAPI. Modifier-only prompts stay local
     // because they modify the object that is already visible in the viewer.
