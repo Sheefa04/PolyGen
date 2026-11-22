@@ -35,7 +35,18 @@ type Dimensions = {
 };
 
 type ShapeType = 'cube' | 'sphere' | 'cylinder' | 'cone' | 'torus';
-
+type SceneObject = {
+  id: string;
+  name: string;
+  shape: ShapeType;
+  color: string;
+  dimensions: Dimensions;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+};
 type ActiveView = 'studio' | 'creations' | 'profile';
 
 type AuthUser = {
@@ -309,7 +320,9 @@ function App() {
   const mountRef = useRef<HTMLDivElement>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const sceneMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const selectedObjectIdRef = useRef<string | null>(null);
   const [color, setColor] = useState('#8EAA9B');
   const [prompt, setPrompt] = useState('');
   const [objectName, setObjectName] = useState('Procedural cube');
@@ -320,6 +333,12 @@ function App() {
     height: '1.50',
     depth: '1.50',
   });
+    // Multi-object scene state
+  const [sceneObjects, setSceneObjects] = useState<SceneObject[]>([]);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  useEffect(() => {
+  selectedObjectIdRef.current = selectedObjectId;
+}, [selectedObjectId]);
   const [message, setMessage] = useState('Your creative space is ready.');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageName, setImageName] = useState('');
@@ -594,15 +613,34 @@ function App() {
     }
   };
 
-  // Reset camera and object rotation.
+  // Reset the camera and every object's rotation in the current scene.
   const resetCamera = () => {
-    if (!cameraRef.current) return;
-    cameraRef.current.position.set(3, 2.4, 4);
-    cameraRef.current.lookAt(0, 0, 0);
-
-    if (meshRef.current) {
-      meshRef.current.rotation.set(0, 0, 0);
+    if (cameraRef.current) {
+      cameraRef.current.position.set(3, 2.4, 4);
+      cameraRef.current.lookAt(0, 0, 0);
     }
+
+    sceneMeshesRef.current.forEach((mesh) => {
+      mesh.rotation.set(0, 0, 0);
+    });
+
+    setMessage('Camera and object rotations reset.');
+  };
+
+  // Select an object and load its values into the Inspector.
+  const selectSceneObject = (id: string) => {
+    const selected = sceneObjects.find((item) => item.id === id);
+    const mesh = sceneMeshesRef.current.get(id);
+    if (!selected || !mesh) return;
+
+    selectedObjectIdRef.current = id;
+    setSelectedObjectId(id);
+    meshRef.current = mesh;
+    setObjectName(selected.name);
+    setCurrentShape(selected.shape);
+    setColor(selected.color);
+    setDimensions({ ...selected.dimensions });
+    setSelectedCreationId(null);
   };
 
   // Create and manage the Three.js scene.
@@ -612,7 +650,7 @@ function App() {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#F7F7F3');
-
+    sceneRef.current = scene;
     const camera = new THREE.PerspectiveCamera(
       45,
       Math.max(container.clientWidth, 1) /
@@ -654,7 +692,28 @@ function App() {
     object.receiveShadow = true;
     scene.add(object);
     meshRef.current = object;
+    // Register the initial cube as the first scene object.
+    const initialObjectId = 'initial-cube';
+    sceneMeshesRef.current.clear();
+    sceneMeshesRef.current.set(initialObjectId, object);
+    selectedObjectIdRef.current = initialObjectId;
 
+    setSceneObjects([
+      {
+        id: initialObjectId,
+        name: 'Procedural cube',
+        shape: 'cube',
+        color: '#8EAA9B',
+        dimensions: {
+          width: '1.50',
+          height: '1.50',
+          depth: '1.50',
+        },
+        position: { x: 0, y: 0, z: 0 },
+      },
+    ]);
+
+    setSelectedObjectId(initialObjectId);
     // Mouse and touch rotation.
     let isDragging = false;
     let previousX = 0;
@@ -663,19 +722,39 @@ function App() {
     const canvas = renderer.domElement;
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      isDragging = true;
-      previousX = event.clientX;
-      previousY = event.clientY;
-      canvas.setPointerCapture(event.pointerId);
-    };
+  if (event.button !== 0) return;
 
-    const handlePointerMove = (event: PointerEvent) => {
+  isDragging = true;
+
+  console.log(
+    'POINTER DOWN:',
+    selectedObjectIdRef.current,
+    meshRef.current?.uuid
+  );
+
+  previousX = event.clientX;
+  previousY = event.clientY;
+  canvas.setPointerCapture(event.pointerId);
+};
+
+        const handlePointerMove = (event: PointerEvent) => {
       if (!isDragging) return;
+
       const deltaX = event.clientX - previousX;
       const deltaY = event.clientY - previousY;
-      object.rotation.y += deltaX * 0.01;
-      object.rotation.x += deltaY * 0.01;
+
+      const selectedMesh = meshRef.current;
+
+console.log(
+  'POINTER MOVE:',
+  selectedObjectIdRef.current,
+  selectedMesh?.uuid
+);
+
+if (selectedMesh) {
+  selectedMesh.rotation.y += deltaX * 0.01;
+  selectedMesh.rotation.x += deltaY * 0.01;
+}
       previousX = event.clientX;
       previousY = event.clientY;
     };
@@ -701,7 +780,6 @@ function App() {
     canvas.addEventListener('pointerup', handlePointerUp);
     canvas.addEventListener('pointercancel', handlePointerUp);
     canvas.addEventListener('wheel', handleWheel, { passive: false });
-
     // Lighting.
     const ambientLight = new THREE.AmbientLight(0xffffff, 2);
     scene.add(ambientLight);
@@ -769,21 +847,37 @@ function App() {
       }
       meshRef.current = null;
       cameraRef.current = null;
+      sceneRef.current = null;
+      sceneMeshesRef.current.clear();
+      selectedObjectIdRef.current = null;
     };
   }, []);
 
-  // Update the selected object's colour.
+  // Keep the selected mesh and Inspector values synchronized.
   useEffect(() => {
-    const material = meshRef.current?.material;
-    if (material instanceof THREE.MeshStandardMaterial) {
-      material.color.set(color);
-    }
-  }, [color]);
+    const selected = sceneObjects.find((item) => item.id === selectedObjectId);
+    const mesh = selectedObjectId
+      ? sceneMeshesRef.current.get(selectedObjectId)
+      : null;
 
-  // Apply editable dimensions to the active 3D object.
+    if (!selected || !mesh) return;
+
+    meshRef.current = mesh;
+    setObjectName(selected.name);
+    setCurrentShape(selected.shape);
+    setColor(selected.color);
+    setDimensions({ ...selected.dimensions });
+  }, [selectedObjectId]); // Selection changes only; edits are handled below.
+
+  // Apply Inspector colour and dimensions to the selected mesh.
   useEffect(() => {
-    const mesh = meshRef.current;
+    if (!selectedObjectId) return;
+    const mesh = sceneMeshesRef.current.get(selectedObjectId);
     if (!mesh) return;
+
+    if (mesh.material instanceof THREE.MeshStandardMaterial) {
+      mesh.material.color.set(color);
+    }
 
     const base = getDimensions(currentShape);
     mesh.scale.set(
@@ -791,7 +885,41 @@ function App() {
       Math.max(Number(dimensions.height) / Number(base.height), 0.01),
       Math.max(Number(dimensions.depth) / Number(base.depth), 0.01)
     );
-  }, [dimensions, currentShape]);
+  }, [color, dimensions, currentShape, selectedObjectId]);
+
+  // Persist Inspector edits in the in-memory scene-object list.
+  useEffect(() => {
+    if (!selectedObjectId) return;
+
+    setSceneObjects((previous) => {
+      const index = previous.findIndex((item) => item.id === selectedObjectId);
+      if (index === -1) return previous;
+
+      const current = previous[index];
+      if (
+        current.name === objectName &&
+        current.shape === currentShape &&
+        current.color === color &&
+        current.dimensions.width === dimensions.width &&
+        current.dimensions.height === dimensions.height &&
+        current.dimensions.depth === dimensions.depth
+      ) {
+        return previous;
+      }
+
+      return previous.map((item) =>
+        item.id === selectedObjectId
+          ? {
+              ...item,
+              name: objectName,
+              shape: currentShape,
+              color,
+              dimensions: { ...dimensions },
+            }
+          : item
+      );
+    });
+  }, [objectName, currentShape, color, dimensions, selectedObjectId]);
 
   const updateDimension = (key: keyof Dimensions, value: string) => {
     if (value === '') {
@@ -1056,9 +1184,11 @@ const containsDimensionWord = promptHasAny(promptWords, [
     // prompts keep the shape that is already visible in the viewer.
     const shape: ShapeType = backendAnalysis?.shape ?? currentShape;
 
-    const currentMesh = meshRef.current;
+    const currentMesh = selectedObjectId
+      ? sceneMeshesRef.current.get(selectedObjectId)
+      : null;
     if (!currentMesh) {
-      setMessage('3D viewer is not ready. Please try again.');
+      setMessage('Select an object in the scene before modifying it.');
       return;
     }
 
@@ -1088,16 +1218,6 @@ const containsDimensionWord = promptHasAny(promptWords, [
         detectedColor = '#FFFFFF';
       }
     }
-    setColor(detectedColor);
-
-    // Generate the selected 3D geometry.
-    currentMesh.geometry.dispose();
-    currentMesh.geometry = createGeometry(shape);
-    currentMesh.scale.set(1, 1, 1);
-    currentMesh.rotation.set(0, 0, 0);
-    if (currentMesh.material instanceof THREE.MeshStandardMaterial) {
-      currentMesh.material.color.set(detectedColor);
-    }
 
     // Apply size and proportion words such as large, small, tall and wide.
     const newShapeDimensions = backendAnalysis?.dimensions ?? getPromptDimensions(
@@ -1106,30 +1226,114 @@ const containsDimensionWord = promptHasAny(promptWords, [
       isModifierOnlyPrompt ? dimensions : undefined
     );
     const newObjectName = `Procedural ${shape}`;
+
+    if (isModifierOnlyPrompt) {
+      // Modifier-only prompts edit the currently selected object.
+      currentMesh.geometry.dispose();
+      currentMesh.geometry = createGeometry(shape);
+      currentMesh.rotation.set(0, 0, 0);
+      if (currentMesh.material instanceof THREE.MeshStandardMaterial) {
+        currentMesh.material.color.set(detectedColor);
+      }
+    } else {
+      // A full prompt creates a new object and keeps existing scene objects.
+      const scene = sceneRef.current;
+      if (!scene) {
+        setMessage('3D scene is not ready. Please try again.');
+        return;
+      }
+
+      const newObjectId = `object-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const newMaterial = new THREE.MeshStandardMaterial({
+        color: detectedColor,
+        roughness: 0.45,
+        metalness: 0.12,
+      });
+      const newMesh = new THREE.Mesh(createGeometry(shape), newMaterial);
+      const objectIndex = Math.max(sceneObjects.length - 1, 0);
+      const side = objectIndex % 2 === 0 ? 1 : -1;
+      const row = Math.floor(objectIndex / 2);
+      const position = {
+        x: side * 2.5,
+        y: 0,
+        z: row * -2.5,
+      };
+
+      newMesh.position.set(position.x, position.y, position.z);
+      newMesh.castShadow = true;
+      newMesh.receiveShadow = true;
+
+      const base = getDimensions(shape);
+      newMesh.scale.set(
+        Math.max(Number(newShapeDimensions.width) / Number(base.width), 0.01),
+        Math.max(Number(newShapeDimensions.height) / Number(base.height), 0.01),
+        Math.max(Number(newShapeDimensions.depth) / Number(base.depth), 0.01)
+      );
+
+      scene.add(newMesh);
+      sceneMeshesRef.current.set(newObjectId, newMesh);
+      meshRef.current = newMesh;
+      selectedObjectIdRef.current = newObjectId;
+
+      setSceneObjects((previous) => [
+        ...previous,
+        {
+          id: newObjectId,
+          name: newObjectName,
+          shape,
+          color: detectedColor,
+          dimensions: { ...newShapeDimensions },
+          position,
+        },
+      ]);
+      setSelectedObjectId(newObjectId);
+    }
+
     setSelectedCreationId(null);
     setCurrentShape(shape);
     setObjectName(newObjectName);
     setDimensions(newShapeDimensions);
+    setColor(detectedColor);
     setMessage(
       isModifierOnlyPrompt
-        ? `Updated the current ${shape} dimensions! Click "Save creation" to save.`
-        : `Procedural ${shape} preview created! Click "Save creation" to save to My Creations.`
+        ? `Updated the selected ${shape}!`
+        : `Added a new ${shape} to the scene. Existing objects were kept.`
     );
   };
 
-  // Export a Three.js object as a binary GLB file.
-  const downloadGLB = (mesh: THREE.Mesh, fileName: string) => {
-    const exportScene = new THREE.Scene();
-    const exportMesh = mesh.clone();
-    exportMesh.geometry = mesh.geometry.clone();
-
-    if (Array.isArray(mesh.material)) {
-      exportMesh.material = mesh.material.map((material) => material.clone());
-    } else {
-      exportMesh.material = mesh.material.clone();
+  // Export one mesh or the complete scene as a binary GLB file.
+  const downloadGLB = (meshes: THREE.Mesh | THREE.Mesh[], fileName: string) => {
+    const meshList = Array.isArray(meshes) ? meshes : [meshes];
+    if (meshList.length === 0) {
+      setMessage('There are no objects to export.');
+      return;
     }
 
-    exportScene.add(exportMesh);
+    const exportScene = new THREE.Scene();
+    const exportMeshes = meshList.map((mesh) => {
+      const exportMesh = mesh.clone();
+      exportMesh.geometry = mesh.geometry.clone();
+
+      if (Array.isArray(mesh.material)) {
+        exportMesh.material = mesh.material.map((material) => material.clone());
+      } else {
+        exportMesh.material = mesh.material.clone();
+      }
+
+      exportScene.add(exportMesh);
+      return exportMesh;
+    });
+
+    const disposeExportMeshes = () => {
+      exportMeshes.forEach((mesh) => {
+        mesh.geometry.dispose();
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((material) => material.dispose());
+        } else {
+          mesh.material.dispose();
+        }
+      });
+    };
 
     const exporter = new GLTFExporter();
     exporter.parse(
@@ -1137,7 +1341,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
       (result) => {
         if (!(result instanceof ArrayBuffer)) {
           setMessage('Unable to export this model as a GLB file.');
-          exportMesh.geometry.dispose();
+          disposeExportMeshes();
           return;
         }
 
@@ -1145,36 +1349,31 @@ const containsDimensionWord = promptHasAny(promptWords, [
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${fileName.trim().replace(/[^a-z0-9-_]+/gi, '-') || 'polygen-model'}.glb`;
+        link.download = `${fileName.trim().replace(/[^a-z0-9-_]+/gi, '-') || 'polygen-scene'}.glb`;
         document.body.appendChild(link);
         link.click();
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setMessage('3D model exported successfully!');
-        exportMesh.geometry.dispose();
-        if (Array.isArray(exportMesh.material)) {
-          exportMesh.material.forEach((material) => material.dispose());
-        } else {
-          exportMesh.material.dispose();
-        }
+        setMessage(`Exported ${meshList.length} scene object(s) as GLB.`);
+        disposeExportMeshes();
       },
       (error) => {
         console.error('GLB export failed:', error);
         setMessage('GLB export failed. Please try again.');
-        exportMesh.geometry.dispose();
+        disposeExportMeshes();
       },
       { binary: true }
     );
   };
 
-  // Export the object currently visible in Studio.
+  // Export every object currently present in Studio.
   const exportCurrentCreation = () => {
-    const currentMesh = meshRef.current;
-    if (!currentMesh) {
-      setMessage('3D viewer is not ready. Please try again.');
+    const currentMeshes = Array.from(sceneMeshesRef.current.values());
+    if (currentMeshes.length === 0) {
+      setMessage('There are no objects in the scene to export.');
       return;
     }
-    downloadGLB(currentMesh, objectName);
+    downloadGLB(currentMeshes, 'polygen-scene');
   };
 
   // Export a saved object directly from its stored shape and colour.
@@ -1354,6 +1553,22 @@ const containsDimensionWord = promptHasAny(promptWords, [
     setDimensions(creation.dimensions);
     setColor(creation.color);
     setPrompt(creation.prompt);
+
+    if (selectedObjectId) {
+      setSceneObjects((previous) =>
+        previous.map((item) =>
+          item.id === selectedObjectId
+            ? {
+                ...item,
+                name: creation.name,
+                shape: creation.shape,
+                color: creation.color,
+                dimensions: { ...creation.dimensions },
+              }
+            : item
+        )
+      );
+    }
     setMessage('Saved creation reopened successfully!');
     setActiveView('studio');
   };
@@ -1627,7 +1842,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
                     gap: '10px',
                   }}
                 >
-                  <span className="object-tag">3D OBJECT / 01</span>
+                  <span className="object-tag">{sceneObjects.length} OBJECT(S)</span>
 
                   <button
                     type="button"
@@ -1668,7 +1883,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
 
               <div className="canvas-footer">
                 <span>Drag to rotate · Scroll to zoom</span>
-                <span>Interactive preview</span>
+                <span>{sceneObjects.length} object(s) in scene</span>
               </div>
             </div>
 
@@ -1755,6 +1970,54 @@ const containsDimensionWord = promptHasAny(promptWords, [
                 <SlidersHorizontal size={19} strokeWidth={1.8} />
                 Inspector
               </h2>
+            </div>
+
+            <div className="inspector-section">
+              <p className="section-label">SCENE OBJECTS ({sceneObjects.length})</p>
+              <div style={{ display: 'grid', gap: '7px' }}>
+                {sceneObjects.map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectSceneObject(item.id)}
+                    aria-pressed={selectedObjectId === item.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '9px',
+                      width: '100%',
+                      padding: '9px 10px',
+                      border: selectedObjectId === item.id
+                        ? '1px solid #789483'
+                        : '1px solid #E2E6E1',
+                      borderRadius: '8px',
+                      background: selectedObjectId === item.id ? '#EDF3EE' : '#FFFFFF',
+                      color: '#252B27',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      font: 'inherit',
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: '12px',
+                        height: '12px',
+                        flexShrink: 0,
+                        borderRadius: '50%',
+                        background: item.color,
+                        border: '1px solid rgba(0,0,0,0.12)',
+                      }}
+                    />
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>
+                      {item.name || `${item.shape} ${index + 1}`}
+                    </span>
+                    <span style={{ color: '#8F9992', fontSize: '10px' }}>
+                      {item.shape}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="inspector-section">

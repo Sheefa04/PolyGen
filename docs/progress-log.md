@@ -256,3 +256,55 @@ All the above features were tested successfully.
 - Consider deletion confirmation or undo functionality.
 
 **Status:** Multilingual prompt modification improvements completed and tested. English, Hindi and Hinglish size, dimension, colour and rotation combinations passed. Frontend production build successful.
+## 22 November 2026 — 3D Viewer Interaction Testing
+
+**Browser testing results**
+- Generated a red sphere successfully: Passed.
+- Horizontal mouse rotation: Passed.
+- Vertical mouse rotation: Passed.
+- Mouse-wheel zoom in and out: Passed.
+- Width adjustment: Passed.
+- Height adjustment: Passed.
+- Depth adjustment: Passed.
+- Reset View functionality: Passed.
+
+**Observations**
+- The existing 3D viewer interaction controls work correctly.
+- No additional implementation was required for these tested controls.
+- Backend started successfully using the project's virtual environment.
+- Frontend production build completed successfully.
+
+**Status:** Existing 3D viewer interaction features verified successfully.
+
+## 22 November 2026 — Multi-Object Scene Implementation
+
+**Implementation completed**
+- Added support for generating multiple 3D objects in one scene.
+- Existing objects remain in the scene when new objects are generated.
+- Added individual object selection through the Scene Objects list.
+- Implemented independent colour editing.
+- Implemented independent dimension editing.
+- Fixed individual object rotation for newly generated objects.
+- Preserved the existing 3D viewer functionality.
+
+**Testing results**
+- Multiple object generation: Passed.
+- Individual object selection: Passed.
+- Individual colour editing: Passed.
+- Individual dimension editing: Passed.
+- Individual object rotation: Passed.
+- Frontend TypeScript compilation: Passed.
+- Vite production build: Successful.
+- Multi-object GLB export: Passed; three meshes verified in the exported file.
+
+**Observations**
+- Newly generated objects can be selected and rotated independently.
+- Existing objects remain in the scene during new object generation.
+- The production build still reports a non-blocking large JavaScript chunk warning.
+
+**Pending verification**
+- Confirm Reset View behavior with multiple objects.
+- Continue testing saved creations compatibility.
+- Continue integration and deployment testing.
+
+**Status:** Multi-object scene implementation completed. Individual object rotation fixed and tested. Multi-object GLB export verified.
