@@ -1,4 +1,4 @@
-﻿# PolyGen Daily Progress Log
+# PolyGen Daily Progress Log
 
 ## 11 November 2026
 
@@ -308,3 +308,29 @@ All the above features were tested successfully.
 - Continue integration and deployment testing.
 
 **Status:** Multi-object scene implementation completed. Individual object rotation fixed and tested. Multi-object GLB export verified.
+
+## 23 November 2026 — 3D Viewer Verification and Debug Cleanup
+
+**Testing completed**
+- Mouse-based object rotation: Passed.
+- Mouse-wheel zoom: Passed.
+- Multiple objects in one scene: Passed.
+- Individual object selection and rotation: Passed.
+- Pointer event cleanup: Verified.
+- Animation loop cleanup: Verified.
+- ResizeObserver cleanup: Verified.
+- Three.js renderer disposal: Verified.
+
+**Code cleanup**
+- Removed temporary POINTER DOWN debug log.
+- Removed temporary POINTER MOVE debug log.
+- Preserved backend analysis logging.
+- Preserved existing rotation functionality.
+
+**Build results**
+- Frontend production build: Successful.
+- 2,086 modules transformed.
+- No build errors.
+- Non-blocking JavaScript chunk size warning remains.
+
+**Status:** 3D viewer interaction testing and debugging cleanup completed successfully.

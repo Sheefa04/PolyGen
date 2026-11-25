@@ -726,12 +726,6 @@ function App() {
 
   isDragging = true;
 
-  console.log(
-    'POINTER DOWN:',
-    selectedObjectIdRef.current,
-    meshRef.current?.uuid
-  );
-
   previousX = event.clientX;
   previousY = event.clientY;
   canvas.setPointerCapture(event.pointerId);
@@ -745,11 +739,6 @@ function App() {
 
       const selectedMesh = meshRef.current;
 
-console.log(
-  'POINTER MOVE:',
-  selectedObjectIdRef.current,
-  selectedMesh?.uuid
-);
 
 if (selectedMesh) {
   selectedMesh.rotation.y += deltaX * 0.01;
