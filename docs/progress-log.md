@@ -372,3 +372,28 @@ All the above features were tested successfully.
 - Explore actual AI Text-to-3D and Image-to-3D integration.
 
 **Status:** Multi-object saving, reopening, local persistence, GLB export, deletion and tested cloud save/update workflows completed successfully.
+
+## 27 November 2026 — Multilingual Colour Recognition Improvements
+
+### Work Completed
+- Added seven additional colours: pink, brown, grey, cyan, sky blue, magenta and light green.
+- Improved multilingual colour recognition for English, Hinglish and Hindi prompts.
+- Added longest-alias matching so specific colours such as light green and आसमानी नीला are detected correctly.
+- Preserved existing shape, dimension and multi-object prompt analysis.
+
+### Testing Results
+- Python syntax compilation: Passed.
+- Direct parser tests for additional colours and multi-word aliases: Passed.
+- UTF-8 Hindi API tests: Passed.
+- Multi-object API regression test: Passed.
+- Git whitespace check: Passed.
+
+### Observations
+- Hindi API requests should use UTF-8 encoded JSON when testing through PowerShell to avoid terminal encoding issues.
+
+### Pending Work
+- Final review and push of Day 26 changes.
+- Continue improving multilingual prompt understanding.
+- Explore actual AI Text-to-3D and Image-to-3D integration.
+
+**Status:** Multilingual colour recognition improvements implemented and tested successfully.

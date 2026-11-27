@@ -769,9 +769,11 @@ def normalize_prompt(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def contains(words: set[str], aliases: tuple[str, ...]):
 
-    return any(alias in words for alias in aliases)
+def contains(words: set[str], aliases: tuple[str, ...]):
+    return any(alias in words or alias in " ".join(words)
+        for alias in aliases
+    )
 
 
 SHAPE_ALIASES = {
@@ -818,6 +820,7 @@ BASE_DIMENSIONS = {
 }
 
 
+
 COLOR_ALIASES = {
 
     "#FF0000": ("red", "laal", "लाल"),
@@ -829,8 +832,16 @@ COLOR_ALIASES = {
     "#000000": ("black", "kala", "काला", "काली"),
     "#FFFFFF": ("white", "safed", "सफेद"),
 
-}
+    # Additional colours
+    "#FFC0CB": ("pink", "gulabi", "गुलाबी"),
+    "#A52A2A": ("brown", "bhura", "भूरा", "भूरी"),
+    "#808080": ("grey", "gray", "slaty", "ग्रे"),
+    "#00FFFF": ("cyan", "aqua", "turquoise", "फिरोजी"),
+    "#87CEEB": ("skyblue", "sky-blue", "aasmani-neela", "आसमानी नीला"),
+    "#FF00FF": ("magenta", "fuchsia", "मैजेंटा"),
+    "#90EE90": ("lightgreen", "light-green", "halka-hara", "हल्का हरा"),
 
+}
 
 def analyse_prompt(prompt: str):
 
@@ -916,23 +927,33 @@ def analyse_prompt(prompt: str):
         "depth": f"{limit(depth):.2f}",
 
     }
+    color_matches = []
 
-    color = None
+    padded_prompt = f" {normalized} "
 
     for hex_color, aliases in COLOR_ALIASES.items():
 
-        if contains(words, aliases):
+        for alias in aliases:
 
-            color = hex_color
-            break
+            normalized_alias = normalize_prompt(alias)
+
+            if f" {normalized_alias} " in padded_prompt:
+
+                color_matches.append(
+                    (len(normalized_alias), hex_color)
+                )
+
+    color = (
+        max(color_matches, key=lambda item: item[0])[1]
+        if color_matches
+        else None
+    )
 
     return {
         "shape": shape,
         "color": color,
         "dimensions": dimensions
     }
-
-
 # =====================================================
 # HOME API
 # =====================================================
