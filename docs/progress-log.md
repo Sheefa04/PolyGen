@@ -1,4 +1,4 @@
-# PolyGen Daily Progress Log
+﻿# PolyGen Daily Progress Log
 
 ## 11 November 2026
 
@@ -334,3 +334,41 @@ All the above features were tested successfully.
 - Non-blocking JavaScript chunk size warning remains.
 
 **Status:** 3D viewer interaction testing and debugging cleanup completed successfully.
+
+
+---
+
+## 24 November 2026 — My Creations and Saved Assets
+
+### Work Completed
+- Improved saved creation handling to preserve complete multi-object scene data.
+- Added `creation_data` to local and cloud save/update requests.
+- Improved saved scene restoration with validation of object properties.
+- Updated GLB export to support all objects in a saved scene.
+- Preserved backward compatibility with older single-object creations.
+
+### Testing Results
+- Multiple objects in one scene: Passed.
+- Saved creation reopening: Passed.
+- Scene restoration after reopening: Passed.
+- Local browser refresh persistence: Passed.
+- Full-scene GLB export: Passed.
+- Delete creation functionality: Passed.
+- User login: Passed.
+- Cloud creation save: Passed.
+- Cloud creation update: Passed.
+- Updated colour and dimensions after reopening: Passed.
+- Frontend TypeScript compilation: Passed.
+- Vite production build: Successful.
+
+### Observations
+- Saved scenes can contain multiple objects with individual properties.
+- Cloud-stored creations successfully restore the tested objects, colours and dimensions.
+- The production build still reports a non-blocking JavaScript chunk size warning.
+
+### Pending Work
+- Complete Git review and push the verified changes.
+- Continue improving multilingual prompt understanding.
+- Explore actual AI Text-to-3D and Image-to-3D integration.
+
+**Status:** Multi-object saving, reopening, local persistence, GLB export, deletion and tested cloud save/update workflows completed successfully.

@@ -1365,27 +1365,60 @@ const containsDimensionWord = promptHasAny(promptWords, [
     downloadGLB(currentMeshes, 'polygen-scene');
   };
 
-  // Export a saved object directly from its stored shape and colour.
+  // Export every object in a saved scene (or one legacy saved object).
   const exportSavedCreation = (creation: SavedCreation) => {
-    const exportMesh = new THREE.Mesh(
-      createGeometry(creation.shape),
-      new THREE.MeshStandardMaterial({
+    let objects: SceneObject[] = [];
+
+    try {
+      const parsed: unknown = creation.creation_data
+        ? JSON.parse(creation.creation_data)
+        : null;
+      if (Array.isArray(parsed)) {
+        objects = parsed as SceneObject[];
+      }
+    } catch (error) {
+      console.warn('Could not read saved scene data; exporting legacy object.', error);
+    }
+
+    if (objects.length === 0) {
+      objects = [{
+        id: `legacy-${creation.id}`,
+        name: creation.name,
+        shape: creation.shape,
         color: creation.color,
-        roughness: 0.45,
-        metalness: 0.12,
-      })
-    );
+        dimensions: { ...creation.dimensions },
+        position: { x: 0, y: 0, z: 0 },
+      }];
+    }
 
-    const base = baseDimensionsForShape(creation.shape);
-    exportMesh.scale.set(
-      Math.max(Number(creation.dimensions.width) / Number(base.width), 0.01),
-      Math.max(Number(creation.dimensions.height) / Number(base.height), 0.01),
-      Math.max(Number(creation.dimensions.depth) / Number(base.depth), 0.01)
-    );
+    const exportMeshes = objects.map((item) => {
+      const mesh = new THREE.Mesh(
+        createGeometry(item.shape),
+        new THREE.MeshStandardMaterial({
+          color: item.color,
+          roughness: 0.45,
+          metalness: 0.12,
+        })
+      );
+      const base = baseDimensionsForShape(item.shape);
+      mesh.scale.set(
+        Math.max(Number(item.dimensions.width) / Number(base.width), 0.01),
+        Math.max(Number(item.dimensions.height) / Number(base.height), 0.01),
+        Math.max(Number(item.dimensions.depth) / Number(base.depth), 0.01)
+      );
+      mesh.position.set(
+        Number(item.position?.x) || 0,
+        Number(item.position?.y) || 0,
+        Number(item.position?.z) || 0
+      );
+      return mesh;
+    });
 
-    downloadGLB(exportMesh, creation.name);
-    exportMesh.geometry.dispose();
-    (exportMesh.material as THREE.Material).dispose();
+    downloadGLB(exportMeshes, creation.name);
+    exportMeshes.forEach((mesh) => {
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    });
   };
 
   // Add a new creation or update the creation currently open in Studio.
@@ -1397,6 +1430,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
     }
 
     const token = localStorage.getItem('polygen_token');
+    const sceneData = JSON.stringify(sceneObjects);
 
     // Cloud storage flow when user is authenticated
     if (user && token) {
@@ -1420,6 +1454,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
               color,
               dimensions,
               prompt: prompt.trim(),
+              creation_data: sceneData,
             }),
           });
 
@@ -1448,6 +1483,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
               color,
               dimensions,
               prompt: prompt.trim(),
+              creation_data: sceneData,
             }),
           });
 
@@ -1484,6 +1520,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
         color,
         dimensions: { ...dimensions },
         prompt,
+        creation_data: sceneData,
       };
 
       setSavedCreations((previous) =>
@@ -1505,6 +1542,7 @@ const containsDimensionWord = promptHasAny(promptWords, [
         color,
         dimensions: { ...dimensions },
         prompt,
+        creation_data: sceneData,
       };
 
       setSavedCreations((previous) => [...previous, newCreation]);
@@ -1514,53 +1552,131 @@ const containsDimensionWord = promptHasAny(promptWords, [
   };
 
   // Reopen a saved object in the Studio.
-  const openCreation = (creation: SavedCreation) => {
-    const currentMesh = meshRef.current;
-    if (!currentMesh) {
-      setMessage('3D viewer is not ready. Please try again.');
-      return;
+const openCreation = (creation: SavedCreation) => {
+  const scene = sceneRef.current;
+
+  if (!scene) {
+    setMessage('3D viewer is not ready. Please try again.');
+    return;
+  }
+
+  // Read the saved scene. Older creations may not have scene data.
+  let restoredObjects: SceneObject[] = [];
+
+  try {
+    if (creation.creation_data) {
+      const parsed = JSON.parse(creation.creation_data);
+      if (Array.isArray(parsed)) {
+        restoredObjects = parsed.filter((item): item is SceneObject =>
+          item &&
+          typeof item.id === 'string' &&
+          typeof item.name === 'string' &&
+          ['cube', 'sphere', 'cylinder', 'cone', 'torus'].includes(item.shape) &&
+          typeof item.color === 'string' &&
+          item.dimensions &&
+          Number.isFinite(Number(item.dimensions.width)) &&
+          Number.isFinite(Number(item.dimensions.height)) &&
+          Number.isFinite(Number(item.dimensions.depth))
+        ).map((item) => ({
+          ...item,
+          dimensions: {
+            width: String(item.dimensions.width),
+            height: String(item.dimensions.height),
+            depth: String(item.dimensions.depth),
+          },
+          position: {
+            x: Number(item.position?.x) || 0,
+            y: Number(item.position?.y) || 0,
+            z: Number(item.position?.z) || 0,
+          },
+        }));
+      }
     }
+  } catch {
+    restoredObjects = [];
+  }
 
-    currentMesh.geometry.dispose();
-    currentMesh.geometry = createGeometry(creation.shape);
-    currentMesh.rotation.set(0, 0, 0);
+  // Backward compatibility for older single-object creations.
+  if (restoredObjects.length === 0) {
+    restoredObjects = [{
+      id: 'restored-' + creation.id,
+      name: creation.name,
+      shape: creation.shape,
+      color: creation.color,
+      dimensions: { ...creation.dimensions },
+      position: { x: 0, y: 0, z: 0 },
+    }];
+  }
 
-    if (currentMesh.material instanceof THREE.MeshStandardMaterial) {
-      currentMesh.material.color.set(creation.color);
+  // Remove old meshes from the Three.js scene.
+  sceneMeshesRef.current.forEach((mesh) => {
+    scene.remove(mesh);
+    mesh.geometry.dispose();
+
+    if (Array.isArray(mesh.material)) {
+      mesh.material.forEach((material) => material.dispose());
+    } else {
+      mesh.material.dispose();
     }
+  });
 
-    const base = getDimensions(creation.shape);
-    currentMesh.scale.set(
-      Math.max(Number(creation.dimensions.width) / Number(base.width), 0.01),
-      Math.max(Number(creation.dimensions.height) / Number(base.height), 0.01),
-      Math.max(Number(creation.dimensions.depth) / Number(base.depth), 0.01)
+  sceneMeshesRef.current.clear();
+
+  // Recreate every saved object.
+  restoredObjects.forEach((item) => {
+    const material = new THREE.MeshStandardMaterial({
+      color: item.color,
+      roughness: 0.45,
+      metalness: 0.12,
+    });
+
+    const mesh = new THREE.Mesh(
+      createGeometry(item.shape),
+      material
     );
 
-    setSelectedCreationId(creation.id);
-    setObjectName(creation.name);
-    setCurrentShape(creation.shape);
-    setDimensions(creation.dimensions);
-    setColor(creation.color);
-    setPrompt(creation.prompt);
+    const base = getDimensions(item.shape);
 
-    if (selectedObjectId) {
-      setSceneObjects((previous) =>
-        previous.map((item) =>
-          item.id === selectedObjectId
-            ? {
-                ...item,
-                name: creation.name,
-                shape: creation.shape,
-                color: creation.color,
-                dimensions: { ...creation.dimensions },
-              }
-            : item
-        )
-      );
-    }
-    setMessage('Saved creation reopened successfully!');
-    setActiveView('studio');
-  };
+    mesh.scale.set(
+      Math.max(Number(item.dimensions.width) / Number(base.width), 0.01),
+      Math.max(Number(item.dimensions.height) / Number(base.height), 0.01),
+      Math.max(Number(item.dimensions.depth) / Number(base.depth), 0.01)
+    );
+
+    mesh.position.set(
+      item.position.x,
+      item.position.y,
+      item.position.z
+    );
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    scene.add(mesh);
+    sceneMeshesRef.current.set(item.id, mesh);
+  });
+
+  // Select the first restored object.
+  const firstObject = restoredObjects[0];
+  const firstMesh = sceneMeshesRef.current.get(firstObject.id);
+
+  if (firstMesh) {
+    meshRef.current = firstMesh;
+    selectedObjectIdRef.current = firstObject.id;
+    setSelectedObjectId(firstObject.id);
+  }
+
+  setSceneObjects(restoredObjects);
+  setSelectedCreationId(creation.id);
+  setObjectName(creation.name);
+  setCurrentShape(firstObject.shape);
+  setDimensions({ ...firstObject.dimensions });
+  setColor(firstObject.color);
+  setPrompt(creation.prompt);
+
+  setMessage('Saved scene reopened successfully!');
+  setActiveView('studio');
+};
 
   // Delete a saved object.
   const deleteCreation = async (id: number) => {
