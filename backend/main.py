@@ -39,6 +39,8 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -947,6 +949,40 @@ def home():
 # =====================================================
 # HEALTH CHECK API
 # =====================================================
+def analyse_prompt_objects(prompt: str):
+    """
+    Analyse a prompt containing multiple objects.
+    Keeps the existing analyse_prompt() unchanged.
+    """
+
+    parts = re.split(
+        r"\s*(?:,|;|\band\b|\baur\b|और|&)\s*",
+        prompt,
+        flags=re.IGNORECASE,
+    )
+
+    objects = []
+
+    for part in parts:
+        part = part.strip()
+
+        if not part:
+            continue
+
+        result = analyse_prompt(part)
+
+        if result is not None:
+            objects.append(result)
+
+        if len(objects) >= 10:
+            break
+
+    if not objects:
+        result = analyse_prompt(prompt)
+        if result is not None:
+            objects.append(result)
+
+    return objects if objects else None
 
 @app.get("/health")
 def health_check():
@@ -961,34 +997,36 @@ def health_check():
 # TEXT-TO-3D PROMPT API
 # =====================================================
 
+
 @app.post("/api/prompt")
 def analyze_prompt(request: PromptRequest):
 
     prompt = request.prompt.strip()
 
     if not prompt:
-
         return {
             "success": False,
             "message": "Prompt cannot be empty."
         }
 
-    result = analyse_prompt(prompt)
+    objects = analyse_prompt_objects(prompt)
 
-    if result is None:
-
+    if not objects:
         return {
             "success": False,
             "message": "Shape not recognised. Try cube, sphere, cylinder, cone or torus.",
         }
 
+    # Keep the first object's fields for frontend backward compatibility.
+    first_object = objects[0]
+
     return {
         "success": True,
         "received_prompt": prompt,
-        **result,
+        **first_object,
+        "objects": objects,
         "message": "Prompt analysed successfully by PolyGen backend.",
     }
-
 
 # =====================================================
 # IMAGE VALIDATION API

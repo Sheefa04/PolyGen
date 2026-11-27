@@ -1121,12 +1121,16 @@ const containsDimensionWord = promptHasAny(promptWords, [
 
     // Full prompts are analysed by FastAPI. Modifier-only prompts stay local
     // because they modify the object that is already visible in the viewer.
-    let backendAnalysis: {
-      shape: ShapeType;
-      color: string | null;
-      dimensions: Dimensions;
-    } | null = null;
-
+      let backendAnalysis: {
+          shape: ShapeType;
+          color: string | null;
+          dimensions: Dimensions;
+          objects: Array<{
+          shape: ShapeType;
+          color: string | null;
+          dimensions: Dimensions;
+        }>;
+      } | null = null;
     if (!isModifierOnlyPrompt) {
       try {
         const response = await fetch('http://127.0.0.1:8000/api/prompt', {
@@ -1141,25 +1145,39 @@ const containsDimensionWord = promptHasAny(promptWords, [
           return;
         }
 
+        const validShapes = ['cube', 'sphere', 'cylinder', 'cone', 'torus'];
+
+        const isValidObject = (item: any) =>
+          item &&
+          validShapes.includes(item.shape) &&
+          (item.color === null || typeof item.color === 'string') &&
+          item.dimensions &&
+          ['width', 'height', 'depth'].every((key) =>
+            Number.isFinite(Number(item.dimensions[key]))
+          );
+
         if (
-          !['cube', 'sphere', 'cylinder', 'cone', 'torus'].includes(data.shape) ||
-          (data.color !== null && typeof data.color !== 'string') ||
-          !data.dimensions ||
-          !['width', 'height', 'depth'].every((key) =>
-            Number.isFinite(Number(data.dimensions[key]))
-          )
+          !Array.isArray(data.objects) ||
+          data.objects.length === 0 ||
+          data.objects.length > 10 ||
+          !data.objects.every(isValidObject)
         ) {
           throw new Error('Backend returned an invalid object description.');
         }
 
-        backendAnalysis = {
-          shape: data.shape as ShapeType,
-          color: data.color,
+        const normalizedObjects = data.objects.map((item: any) => ({
+          shape: item.shape as ShapeType,
+          color: item.color as string | null,
           dimensions: {
-            width: Number(data.dimensions.width).toFixed(2),
-            height: Number(data.dimensions.height).toFixed(2),
-            depth: Number(data.dimensions.depth).toFixed(2),
+            width: Number(item.dimensions.width).toFixed(2),
+            height: Number(item.dimensions.height).toFixed(2),
+            depth: Number(item.dimensions.depth).toFixed(2),
           },
+        }));
+
+        backendAnalysis = {
+          ...normalizedObjects[0],
+          objects: normalizedObjects,
         };
         console.log('PolyGen Backend Analysis:', data);
       } catch (error) {
@@ -1169,22 +1187,20 @@ const containsDimensionWord = promptHasAny(promptWords, [
       }
     }
 
-    // The backend identifies the shape for full prompts. Modifier-only
-    // prompts keep the shape that is already visible in the viewer.
-    const shape: ShapeType = backendAnalysis?.shape ?? currentShape;
+    // Modifier-only prompts update the selected object. Full prompts create
+    // every object returned by the backend and preserve the existing scene.
+    if (isModifierOnlyPrompt) {
+      const shape: ShapeType = currentShape;
+      const currentMesh = selectedObjectId
+        ? sceneMeshesRef.current.get(selectedObjectId)
+        : null;
 
-    const currentMesh = selectedObjectId
-      ? sceneMeshesRef.current.get(selectedObjectId)
-      : null;
-    if (!currentMesh) {
-      setMessage('Select an object in the scene before modifying it.');
-      return;
-    }
+      if (!currentMesh) {
+        setMessage('Select an object in the scene before modifying it.');
+        return;
+      }
 
-    // The backend's colour is authoritative for full prompts. Local colour
-    // matching is retained for modifier-only updates.
-    let detectedColor = backendAnalysis?.color ?? color;
-    if (!backendAnalysis) {
+      let detectedColor = color;
       if (promptHasAny(promptWords, ['red', 'laal', 'लाल'])) {
         detectedColor = '#FF0000';
       } else if (promptHasAny(promptWords, ['blue', 'neela', 'nila', 'नीला', 'नीली'])) {
@@ -1195,51 +1211,60 @@ const containsDimensionWord = promptHasAny(promptWords, [
         detectedColor = '#FFFF00';
       } else if (promptHasAny(promptWords, ['orange', 'narangi', 'नारंगी'])) {
         detectedColor = '#FFA500';
-      } else if (
-        promptHasAny(promptWords, [
-          'purple', 'baingani', 'jamuni', 'बैंगनी', 'जामुनी',
-        ])
-      ) {
+      } else if (promptHasAny(promptWords, ['purple', 'baingani', 'jamuni', 'बैंगनी', 'जामुनी'])) {
         detectedColor = '#800080';
       } else if (promptHasAny(promptWords, ['black', 'kala', 'काला', 'काली'])) {
         detectedColor = '#000000';
       } else if (promptHasAny(promptWords, ['white', 'safed', 'सफेद'])) {
         detectedColor = '#FFFFFF';
       }
-    }
 
-    // Apply size and proportion words such as large, small, tall and wide.
-    const newShapeDimensions = backendAnalysis?.dimensions ?? getPromptDimensions(
-      shape,
-      promptWords,
-      isModifierOnlyPrompt ? dimensions : undefined
-    );
-    const newObjectName = `Procedural ${shape}`;
+      const newShapeDimensions = getPromptDimensions(
+        shape,
+        promptWords,
+        dimensions
+      );
 
-    if (isModifierOnlyPrompt) {
-      // Modifier-only prompts edit the currently selected object.
       currentMesh.geometry.dispose();
       currentMesh.geometry = createGeometry(shape);
       currentMesh.rotation.set(0, 0, 0);
       if (currentMesh.material instanceof THREE.MeshStandardMaterial) {
         currentMesh.material.color.set(detectedColor);
       }
-    } else {
-      // A full prompt creates a new object and keeps existing scene objects.
-      const scene = sceneRef.current;
-      if (!scene) {
-        setMessage('3D scene is not ready. Please try again.');
-        return;
-      }
 
-      const newObjectId = `object-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setSelectedCreationId(null);
+      setCurrentShape(shape);
+      setObjectName(`Procedural ${shape}`);
+      setDimensions(newShapeDimensions);
+      setColor(detectedColor);
+      setMessage(`Updated the selected ${shape}!`);
+      return;
+    }
+
+    const scene = sceneRef.current;
+    if (!scene || !backendAnalysis) {
+      setMessage('3D scene is not ready. Please try again.');
+      return;
+    }
+
+    const objectsToCreate = backendAnalysis.objects;
+    const createdObjects: SceneObject[] = [];
+    let lastCreatedMesh: THREE.Mesh | null = null;
+
+    objectsToCreate.forEach((item, index) => {
+      const newObjectId = `object-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+      const objectColor = item.color ?? color;
+      const objectName = `Procedural ${item.shape}`;
       const newMaterial = new THREE.MeshStandardMaterial({
-        color: detectedColor,
+        color: objectColor,
         roughness: 0.45,
         metalness: 0.12,
       });
-      const newMesh = new THREE.Mesh(createGeometry(shape), newMaterial);
-      const objectIndex = Math.max(sceneObjects.length - 1, 0);
+      const newMesh = new THREE.Mesh(createGeometry(item.shape), newMaterial);
+
+      // Place new objects in a compact two-column layout, accounting for
+      // objects already present in the scene.
+      const objectIndex = sceneObjects.length + index;
       const side = objectIndex % 2 === 0 ? 1 : -1;
       const row = Math.floor(objectIndex / 2);
       const position = {
@@ -1252,41 +1277,45 @@ const containsDimensionWord = promptHasAny(promptWords, [
       newMesh.castShadow = true;
       newMesh.receiveShadow = true;
 
-      const base = getDimensions(shape);
+      const base = getDimensions(item.shape);
       newMesh.scale.set(
-        Math.max(Number(newShapeDimensions.width) / Number(base.width), 0.01),
-        Math.max(Number(newShapeDimensions.height) / Number(base.height), 0.01),
-        Math.max(Number(newShapeDimensions.depth) / Number(base.depth), 0.01)
+        Math.max(Number(item.dimensions.width) / Number(base.width), 0.01),
+        Math.max(Number(item.dimensions.height) / Number(base.height), 0.01),
+        Math.max(Number(item.dimensions.depth) / Number(base.depth), 0.01)
       );
 
       scene.add(newMesh);
       sceneMeshesRef.current.set(newObjectId, newMesh);
-      meshRef.current = newMesh;
-      selectedObjectIdRef.current = newObjectId;
+      createdObjects.push({
+        id: newObjectId,
+        name: objectName,
+        shape: item.shape,
+        color: objectColor,
+        dimensions: { ...item.dimensions },
+        position,
+      });
+      lastCreatedMesh = newMesh;
+    });
 
-      setSceneObjects((previous) => [
-        ...previous,
-        {
-          id: newObjectId,
-          name: newObjectName,
-          shape,
-          color: detectedColor,
-          dimensions: { ...newShapeDimensions },
-          position,
-        },
-      ]);
-      setSelectedObjectId(newObjectId);
+    if (createdObjects.length === 0 || !lastCreatedMesh) {
+      setMessage('No valid objects were generated. Please try another prompt.');
+      return;
     }
 
+    const lastCreatedObject = createdObjects[createdObjects.length - 1];
+    meshRef.current = lastCreatedMesh;
+    selectedObjectIdRef.current = lastCreatedObject.id;
+    setSceneObjects((previous) => [...previous, ...createdObjects]);
+    setSelectedObjectId(lastCreatedObject.id);
     setSelectedCreationId(null);
-    setCurrentShape(shape);
-    setObjectName(newObjectName);
-    setDimensions(newShapeDimensions);
-    setColor(detectedColor);
+    setCurrentShape(lastCreatedObject.shape);
+    setObjectName(lastCreatedObject.name);
+    setDimensions({ ...lastCreatedObject.dimensions });
+    setColor(lastCreatedObject.color);
     setMessage(
-      isModifierOnlyPrompt
-        ? `Updated the selected ${shape}!`
-        : `Added a new ${shape} to the scene. Existing objects were kept.`
+      createdObjects.length === 1
+        ? `Added a new ${lastCreatedObject.shape} to the scene. Existing objects were kept.`
+        : `Added ${createdObjects.length} objects to the scene. Existing objects were kept.`
     );
   };
 
