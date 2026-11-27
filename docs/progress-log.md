@@ -397,3 +397,34 @@ All the above features were tested successfully.
 - Explore actual AI Text-to-3D and Image-to-3D integration.
 
 **Status:** Multilingual colour recognition improvements implemented and tested successfully.
+
+## 27 November 2026 — Deterministic Multilingual Phrase Matching
+
+### Work Completed
+- Replaced unordered set-based alias matching with deterministic phrase matching.
+- Improved recognition of multi-word shape, colour and modifier aliases.
+- Updated shape and dimension modifier detection to use normalized prompt text.
+- Preserved existing English, Hindi and Hinglish prompt support.
+- Maintained existing multi-object prompt processing.
+
+### Testing Results
+- Python syntax compilation: Passed.
+- English shape and colour regression tests: Passed.
+- Size and dimension modifier tests: Passed.
+- Hindi prompt recognition tests: Passed.
+- Hinglish prompt recognition tests: Passed.
+- Multi-object parser regression test: Passed.
+- Hindi UTF-8 API test: Passed for shape and colour recognition.
+- Multi-object API test: Passed.
+- Git whitespace check: Passed.
+
+### Observations
+- Deterministic phrase matching avoids unreliable phrase detection caused by unordered set joining.
+- PowerShell may display Hindi API response text incorrectly even when the backend recognizes the prompt correctly.
+
+### Pending Work
+- Frontend regression testing.
+- Final Git review and push of Day 27 changes.
+- Explore actual AI Text-to-3D and Image-to-3D integration.
+
+**Status:** Deterministic multilingual phrase matching implemented and backend-tested successfully.

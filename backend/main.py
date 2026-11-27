@@ -770,8 +770,12 @@ def normalize_prompt(value: str) -> str:
 
 
 
-def contains(words: set[str], aliases: tuple[str, ...]):
-    return any(alias in words or alias in " ".join(words)
+def contains(normalized: str, aliases: tuple[str, ...]):
+
+    padded_prompt = f" {normalized} "
+
+    return any(
+        f" {normalize_prompt(alias)} " in padded_prompt
         for alias in aliases
     )
 
@@ -842,17 +846,15 @@ COLOR_ALIASES = {
     "#90EE90": ("lightgreen", "light-green", "halka-hara", "हल्का हरा"),
 
 }
-
 def analyse_prompt(prompt: str):
 
     normalized = normalize_prompt(prompt)
-    words = set(normalized.split())
 
     shape = next(
         (
             name
             for name, aliases in SHAPE_ALIASES.items()
-            if contains(words, aliases)
+            if contains(normalized, aliases)
         ),
         None,
     )
@@ -862,7 +864,7 @@ def analyse_prompt(prompt: str):
 
     width, height, depth = BASE_DIMENSIONS[shape]
 
-    if contains(words, (
+    if contains(normalized, (
         "small", "tiny", "little", "chhota", "chhoti",
         "chhote", "छोटा", "छोटी", "छोटे", "नन्हा", "नन्ही"
     )):
@@ -871,7 +873,7 @@ def analyse_prompt(prompt: str):
         height *= 0.65
         depth *= 0.65
 
-    elif contains(words, (
+    elif contains(normalized, (
         "large", "big", "huge", "bada", "badi",
         "bade", "बड़ा", "बड़ी", "बड़े", "विशाल"
     )):
@@ -880,39 +882,39 @@ def analyse_prompt(prompt: str):
         height *= 1.5
         depth *= 1.5
 
-    if contains(words, (
+    if contains(normalized, (
         "tall", "long", "lamba", "lambi",
         "ऊँचा", "ऊंचा", "लंबा", "लम्बा", "लंबी", "लम्बी"
     )):
 
         height *= 1.4
 
-    elif contains(words, (
+    elif contains(normalized, (
         "short", "chhota", "chhoti", "नाटा", "छोटा"
     )):
 
         height *= 0.75
 
-    if contains(words, (
+    if contains(normalized, (
         "wide", "broad", "chauda", "chaudi",
         "चौड़ा", "चौड़ी", "चौड़ी"
     )):
 
         width *= 1.35
 
-    elif contains(words, (
+    elif contains(normalized, (
         "narrow", "patla", "patli", "पतला", "पतली"
     )):
 
         width *= 0.75
 
-    if contains(words, (
+    if contains(normalized, (
         "thick", "thicker", "mota", "moti", "मोटा", "मोटी"
     )):
 
         depth *= 1.4
 
-    elif contains(words, (
+    elif contains(normalized, (
         "thin", "thinner", "patla", "patli", "पतला", "पतली"
     )):
 
